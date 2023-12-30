@@ -117,6 +117,11 @@ else
     export TF_NEED_CUDA=0
 fi
 export TF_NEED_TENSORRT=0
+# hmaarrfk -- 2023/12/30
+# This logic should be safe to keep in even when the underlying issue is resolved
+if [[ -x ${BUILD_PREFIX}/nvvm/bin/cicc ]]; then
+    cp ${BUILD_PREFIX}/nvvm/bin/cicc ${BUILD_PREFIX}/bin/cicc
+fi
 
 source ${RECIPE_DIR}/gen-bazel-toolchain.sh
 
@@ -231,3 +236,10 @@ bazel clean
 
 # This was only needed for protobuf_python
 rm -rf $PREFIX/include/python
+
+# hmaarrfk -- 2023/12/30
+# This logic should be safe to keep in even when the underlying issue is resolved
+# https://github.com/conda-forge/cuda-nvcc-impl-feedstock/issues/9
+if [[ -x ${BUILD_PREFIX}/nvvm/bin/cicc ]]; then
+    rf ${BUILD_PREFIX}/bin/cicc
+fi
