@@ -113,7 +113,10 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
         echo "unsupported cuda version."
         exit 1
     fi
+else
+    export TF_NEED_CUDA=0
 fi
+export TF_NEED_TENSORRT=0
 
 source ${RECIPE_DIR}/gen-bazel-toolchain.sh
 
@@ -147,12 +150,10 @@ export USE_DEFAULT_PYTHON_LIB_PATH=1
 export TF_NEED_OPENCL=0
 export TF_NEED_OPENCL_SYCL=0
 export TF_NEED_COMPUTECPP=0
-export TF_NEED_CUDA=0
 export TF_CUDA_CLANG=0
 if [[ "${target_platform}" == linux-* ]]; then
   export TF_NEED_CLANG=0
 fi
-export TF_NEED_TENSORRT=0
 export TF_NEED_ROCM=0
 export TF_NEED_MPI=0
 export TF_DOWNLOAD_CLANG=0
