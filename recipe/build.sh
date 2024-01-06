@@ -103,12 +103,10 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
         export TF_CUDA_PATHS="${PREFIX},${CUDA_HOME}"
     elif [[ "${cuda_compiler_version}" == 12* ]]; then
         export TF_CUDA_COMPUTE_CAPABILITIES=sm_60,sm_70,sm_75,sm_80,sm_86,sm_89,sm_90,compute_90
-	export CUDNN_INSTALL_PATH=$PREFIX
-	export NCCL_INSTALL_PATH=$PREFIX
-	export CUDA_HOME="${BUILD_PREFIX}/targets/x86_64-linux"
+        export CUDNN_INSTALL_PATH=$PREFIX
+        export NCCL_INSTALL_PATH=$PREFIX
+        export CUDA_HOME="${BUILD_PREFIX}/targets/x86_64-linux"
         export TF_CUDA_PATHS="${BUILD_PREFIX}/targets/x86_64-linux,${PREFIX}/targets/x86_64-linux"
-	# XLA can only cope with a single cuda header include directory, merge both
-	rsync -a ${PREFIX}/targets/x86_64-linux/include/ ${BUILD_PREFIX}/targets/x86_64-linux/include/
     else
         echo "unsupported cuda version."
         exit 1
