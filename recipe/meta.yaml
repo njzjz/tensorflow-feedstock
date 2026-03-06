@@ -1,5 +1,4 @@
 {% set version = "2.19.1" %}
-{% set estimator_version = "2.15.0" %}
 {% set build = 3 %}
 
 {% if cuda_compiler_version != "None" %}
@@ -77,9 +76,6 @@ source:
       # backport https://github.com/openxla/xla/pull/22572 into vendored xla
       - patches/0044-PR-22572-Fix-build-break-in-convolution_thunk_intern.patch
       - patches/0045-Force-python-wheel-architecture-to-aarch64.patch  # [aarch64 and target_platform != build_platform]
-  - url: https://github.com/tensorflow/estimator/archive/refs/tags/v{{ estimator_version.replace(".rc", "-rc") }}.tar.gz
-    sha256: 2d7e100b1878084da34b5e23b49a0cbb5ee8a7add74b7dd189a82ada1cf85530
-    folder: tensorflow-estimator
 
 build:
   number: {{ build }}
@@ -381,7 +377,6 @@ outputs:
       run:
         - python
         - {{ pin_subpackage('tensorflow-base', exact=True) }}
-        - {{ pin_subpackage('tensorflow-estimator', exact=True) }}
         # avoid that people without GPUs needlessly download ~0.5-1GB
         # This also helps mamba give preference to the CPU build
         - __cuda  # [cuda_compiler_version != "None"]
@@ -405,56 +400,6 @@ outputs:
         - python -c 'import tensorflow as tf; assert not tf.test.is_built_with_cuda()'  # [cuda_compiler_version == "None" and build_platform == target_platform]
         # See https://github.com/conda-forge/tensorflow-feedstock/issues/364
         - python -c "import tensorflow as tf;graph = tf.function(lambda x:x).get_concrete_function(1.).graph;tf.compat.v1.train.export_meta_graph(graph=graph,graph_def=graph.as_graph_def())"  # [build_platform == target_platform]
-
-  - name: tensorflow-estimator
-    script: build_estimator.sh  # [unix]
-    script: build_estimator.bat  # [win]
-    build:
-      # tensorflow 2.18 doesn't support py313 until 2.20, see
-      # https://github.com/tensorflow/tensorflow/issues/78774
-      skip: true  # [py==313]
-      string: cuda{{ cuda_compiler_version | replace('.', '') }}py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ PKG_BUILDNUM }}  # [cuda_compiler_version != "None"]
-      string: cpu_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ PKG_BUILDNUM }}  # [cuda_compiler_version == "None"]
-    requirements:
-      build:
-        - {{ compiler('c') }}
-        - {{ stdlib("c") }}
-        - {{ compiler('cxx') }}
-        # Keep the cuda compiler here since it helps package solvers
-        # decide on the cuda variant
-        # https://github.com/conda-forge/tensorflow-feedstock/issues/162
-        - {{ compiler('cuda') }}                   # [cuda_compiler_version != "None"]
-        - x86_64-microarch-level  {{ microarch_level }}  # [linux and x86_64]
-        - bazel 6.*
-        - bazel-toolchain
-        - python                                   # [build_platform != target_platform]
-        - cross-python_{{ target_platform }}       # [build_platform != target_platform]
-        - libabseil                                # [build_platform != target_platform]
-        - libgrpc                                  # [build_platform != target_platform]
-        - icu                                      # [build_platform != target_platform]
-        - {{ pin_subpackage('tensorflow-base') }}  # [build_platform != target_platform]
-      host:
-        - python
-        - pip
-        - packaging
-        - setuptools
-        - wheel
-        # This ensures that a consistent version of openssl is chosen between
-        # all packages.
-        # https://github.com/conda-forge/conda-forge.github.io/issues/1528
-        - openssl
-        - {{ pin_subpackage('tensorflow-base', exact=True) }}
-        # Keep the cuda version here since it helps package solvers
-        # decide on the cuda variant
-        - cuda-version {{ cuda_compiler_version }}  # [cuda_compiler_version != "None"]
-      run:
-        - python
-        - {{ pin_subpackage('tensorflow-base', exact=True) }}
-    test:
-      requires:
-        - pip
-      commands:
-        - pip check  # [build_platform == target_platform]
 
   - name: libtensorflow
     script: cp_libtensorflow.sh
