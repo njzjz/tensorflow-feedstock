@@ -2,6 +2,9 @@
 
 set -ex
 
+# See https://github.com/conda-forge/bazel-feedstock/issues/273
+find $BUILD_PREFIX/share/bazel/install | xargs -n 1 touch -mt 203601010101
+
 for ver in 3.9 3.10 3.11 3.12; do
   export PY_VER=$ver
   echo "Building for $PY_VER"
