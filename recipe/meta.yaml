@@ -76,7 +76,6 @@ source:
       # backport https://github.com/openxla/xla/pull/22572 into vendored xla
       - patches/0044-PR-22572-Fix-build-break-in-convolution_thunk_intern.patch
       - patches/0045-Force-python-wheel-architecture-to-aarch64.patch  # [aarch64 and target_platform != build_platform]
-      - patches/0001-Update-XNNPACK-to-fix-the-execstack-issue.patch
 
 build:
   number: {{ build }}
