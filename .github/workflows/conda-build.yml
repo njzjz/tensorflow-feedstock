@@ -25,36 +25,36 @@ jobs:
           # - CONFIG: linux_64_cuda_compiler_version12.8microarch_level1
           #   UPLOAD_PACKAGES: True
           #   os: ubuntu
-          #   runs_on: ['namespace-profile-8cpu-on-linux-64']
+          #   runs_on: ['namespace-profile-16cpu-on-linux-64']
           #   DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma9
           # - CONFIG: linux_64_cuda_compiler_version12.8microarch_level3
           #   UPLOAD_PACKAGES: True
           #   os: ubuntu
-          #   runs_on: ['namespace-profile-8cpu-on-linux-64']
+          #   runs_on: ['namespace-profile-16cpu-on-linux-64']
           #   DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma9
           # - CONFIG: linux_64_cuda_compiler_versionNonemicroarch_level1
           #   UPLOAD_PACKAGES: True
           #   os: ubuntu
-          #   runs_on: ['namespace-profile-8cpu-on-linux-64']
+          #   runs_on: ['namespace-profile-16cpu-on-linux-64']
           #   DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma9
           - CONFIG: linux_64_cuda_compiler_versionNonemicroarch_level3
             UPLOAD_PACKAGES: True
             os: ubuntu
-            runs_on: ['namespace-profile-8cpu-on-linux-64']
+            runs_on: ['namespace-profile-16cpu-on-linux-64']
             DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma9
           - CONFIG: linux_aarch64_cuda_compiler_versionNone
             UPLOAD_PACKAGES: True
             os: ubuntu
-            runs_on: ['namespace-profile-8cpu-on-linux-aarch64']
+            runs_on: ['namespace-profile-16cpu-on-linux-aarch64']
             DOCKER_IMAGE: quay.io/condaforge/linux-anvil-aarch64:alma9
           # - CONFIG: osx_64_
           #   UPLOAD_PACKAGES: True
           #   os: macos
-          #   runs_on: ['namespace-profile-6cpu-on-osx-arm64']
+          #   runs_on: ['namespace-profile-12cpu-on-osx-arm64']
           - CONFIG: osx_arm64_
             UPLOAD_PACKAGES: True
             os: macos
-            runs_on: ['namespace-profile-6cpu-on-osx-arm64']
+            runs_on: ['namespace-profile-12cpu-on-osx-arm64']
     steps:
 
     - name: Checkout code

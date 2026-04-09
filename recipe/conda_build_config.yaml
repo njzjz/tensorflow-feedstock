@@ -7,9 +7,9 @@ cxx_compiler_version:           # [aarch64]
   - 11                          # [aarch64]
 
 github_actions_labels:          # [unix]
-- namespace-profile-8cpu-on-linux-64       # [linux64]
-- namespace-profile-8cpu-on-linux-aarch64  # [linux and aarch64]
-- namespace-profile-6cpu-on-osx-arm64      # [osx]
+- namespace-profile-16cpu-on-linux-64       # [linux64]
+- namespace-profile-16cpu-on-linux-aarch64  # [linux and aarch64]
+- namespace-profile-12cpu-on-osx-arm64      # [osx]
 microarch_level:
 - 1
 # hmaarrfk -- temporary, uncomment during actual build
