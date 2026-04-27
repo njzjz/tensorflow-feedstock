@@ -252,11 +252,9 @@ sed -ie "s;BUILD_PREFIX;${BUILD_PREFIX};g" tensorflow/tools/pip_package/build_pi
 # build using bazel
 bazel ${BAZEL_OPTS} build ${BUILD_TARGET}
 
-# build a whl file
+# copy the whl file
 mkdir -p $SRC_DIR/tensorflow_pkg
-whl=$(ls bazel-bin/tensorflow/tools/pip_package/wheel_house/tensorflow*.whl)
-cp_ver=$($PREFIX/bin/python -c "import sys;print(''.join(str(v) for v in sys.version_info[:2]))")
-cp $whl $SRC_DIR/tensorflow_pkg/$(basename ${whl} | sed s@cp${cp_ver}@cp${PY_VER/./}@g) || true
+cp bazel-bin/tensorflow/tools/pip_package/wheel_house/tensorflow*.whl $SRC_DIR/tensorflow_pkg/
 
 if [[ ! -f "${SRC_DIR}/libtensorflow_cc_output.tar" ]]; then
   # Build libtensorflow(_cc)
