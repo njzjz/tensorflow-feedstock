@@ -9,7 +9,7 @@ for ver in 3.9 3.10 3.11 3.12; do
   export PY_VER=$ver
   echo "Building for $PY_VER"
   date
-  if [[ "$PY_VER == "3.9" ]]; then
+  if [[ "$PY_VER" == "3.9" ]]; then
     # let bazel download python headers first
     bash $RECIPE_DIR/build_common.sh || true
   fi
