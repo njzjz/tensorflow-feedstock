@@ -10,8 +10,6 @@ channel_sources:
 - conda-forge
 channel_targets:
 - conda-forge main
-cuda_compiler:
-- cuda-nvcc
 cuda_compiler_version:
 - None
 cxx_compiler:
@@ -29,23 +27,19 @@ github_actions_labels:
 icu:
 - '78'
 libabseil:
-- '20250512'
+- '20260107'
 libcurl:
 - '8'
 libgrpc:
-- '1.73'
+- '1.78'
 libjpeg_turbo:
 - '3'
 libpng:
 - '1.6'
 libprotobuf:
-- 6.31.1
-libtensorflow_cc:
-- '2.16'
+- 6.33.5
 microarch_level:
 - '1'
-numpy:
-- '2'
 openssl:
 - '3.5'
 perl:
@@ -65,8 +59,6 @@ sqlite:
 - '3'
 target_platform:
 - linux-aarch64
-tensorflow:
-- '2.16'
 zip_keys:
 - - c_compiler_version
   - cxx_compiler_version
