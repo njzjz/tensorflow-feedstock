@@ -1,0 +1,29 @@
+From d4921a8bc3d947d0cb3a7cb3f0b58ed52b49e9eb Mon Sep 17 00:00:00 2001
+From: Filippo Luca Ferretti <filippoluca.ferretti@outlook.com>
+Date: Fri, 27 Mar 2026 17:38:01 +0100
+Subject: [PATCH] Add nullability target to TSL system absl base BUILD
+
+Patch 0019 adds absl::Nonnull (nullability) to third_party/absl/system.absl.base.BUILD,
+but the TSL workspace (loaded as @local_tsl) uses its own copy of this file at
+third_party/xla/third_party/tsl/third_party/absl/system.absl.base.BUILD.
+Add the same nullability target there so that files including absl/base/nullability.h
+can resolve the //absl/base:nullability target when using system abseil.
+
+diff --git a/third_party/xla/third_party/tsl/third_party/absl/system.absl.base.BUILD b/third_party/xla/third_party/tsl/third_party/absl/system.absl.base.BUILD
+--- a/third_party/xla/third_party/tsl/third_party/absl/system.absl.base.BUILD
++++ b/third_party/xla/third_party/tsl/third_party/absl/system.absl.base.BUILD
+@@ -21,6 +21,14 @@
+ )
+ 
+ cc_library(
++    name = "nullability",
++    deps = [
++        ":core_headers",
++        "//absl/meta:type_traits",
++    ],
++)
++
++cc_library(
+     name = "raw_logging_internal",
+     linkopts = ["-labsl_raw_logging_internal"],
+     visibility = [

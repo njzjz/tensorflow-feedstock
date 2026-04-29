@@ -1,0 +1,21 @@
+From d4921a8bc3d947d0cb3a7cb3f0b58ed52b49e9eb Mon Sep 17 00:00:00 2001
+From: Filippo Luca Ferretti <filippoluca.ferretti@outlook.com>
+Date: Fri, 27 Mar 2026 17:38:01 +0100
+Subject: [PATCH] Add nullability dep to absl/base system BUILD
+
+In abseil-cpp 20260107, absl/strings/string_view.h and many other
+commonly-used headers now include absl/base/nullability.h. Add
+:nullability as a dep of :base so that the Bazel BUILD dep graph is
+complete for targets that transitively depend on :base.
+
+diff --git a/third_party/absl/system.absl.base.BUILD b/third_party/absl/system.absl.base.BUILD
+--- a/third_party/absl/system.absl.base.BUILD
++++ b/third_party/absl/system.absl.base.BUILD
+@@ -84,6 +84,7 @@
+     ],
+     deps = [
+         ":log_severity",
++        ":nullability",
+         ":raw_logging_internal",
+         ":spinlock_wait",
+     ],

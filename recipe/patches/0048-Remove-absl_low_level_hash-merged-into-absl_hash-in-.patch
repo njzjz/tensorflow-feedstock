@@ -1,0 +1,55 @@
+From d4921a8bc3d947d0cb3a7cb3f0b58ed52b49e9eb Mon Sep 17 00:00:00 2001
+From: Filippo Luca Ferretti <filippoluca.ferretti@outlook.com>
+Date: Fri, 27 Mar 2026 17:38:01 +0100
+Subject: [PATCH] Remove absl_low_level_hash merged into absl_hash in 20260107
+
+In libabseil 20260107, the low_level_hash component was merged into the
+hash library and is no longer shipped as a separate shared library.
+Remove the -labsl_low_level_hash linkopt and the dep from system BUILD files.
+
+diff --git a/third_party/absl/system.absl.hash.BUILD b/third_party/absl/system.absl.hash.BUILD
+--- a/third_party/absl/system.absl.hash.BUILD
++++ b/third_party/absl/system.absl.hash.BUILD
+@@ -7,7 +7,6 @@
+     linkopts = ["-labsl_hash"],
+     deps = [
+         ":city",
+-        ":low_level_hash",
+         "//absl/base:endian",
+         "//absl/container:fixed_array",
+         "//absl/numeric:int128",
+@@ -28,10 +27,5 @@
+ 
+ cc_library(
+     name = "low_level_hash",
+-    linkopts = ["-labsl_low_level_hash"],
+-    visibility = ["//visibility:private"],
+-    deps = [
+-        "//absl/base:endian",
+-        "//absl/numeric:int128",
+-    ],
++    # absl_low_level_hash was merged into absl_hash in 20260107
+ )
+diff --git a/third_party/xla/third_party/tsl/third_party/absl/system.absl.hash.BUILD b/third_party/xla/third_party/tsl/third_party/absl/system.absl.hash.BUILD
+--- a/third_party/xla/third_party/tsl/third_party/absl/system.absl.hash.BUILD
++++ b/third_party/xla/third_party/tsl/third_party/absl/system.absl.hash.BUILD
+@@ -7,7 +7,6 @@
+     linkopts = ["-labsl_hash"],
+     deps = [
+         ":city",
+-        ":low_level_hash",
+         "//absl/base:endian",
+         "//absl/container:fixed_array",
+         "//absl/numeric:int128",
+@@ -28,10 +27,5 @@
+ 
+ cc_library(
+     name = "low_level_hash",
+-    linkopts = ["-labsl_low_level_hash"],
+-    visibility = ["//visibility:private"],
+-    deps = [
+-        "//absl/base:endian",
+-        "//absl/numeric:int128",
+-    ],
++    # absl_low_level_hash was merged into absl_hash in 20260107
+ )

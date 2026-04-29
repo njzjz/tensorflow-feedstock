@@ -5,6 +5,8 @@ set -exuo pipefail
 PY_VER=$($PREFIX/bin/python -c "import sys;print('.'.join(str(v) for v in sys.version_info[:2]))")
 
 # install the whl making sure to use host pip/python if cross-compiling
+# With staging/inherit, $SRC_DIR is shared with the staging output
+# so tensorflow_pkg/ is directly accessible here.
 ${PYTHON} -m pip install --no-deps $SRC_DIR/tensorflow_pkg/*-cp${PY_VER/./}-*.whl
 
 sed -i.bak "s/cp312/cp${PY_VER/./}/g" ${SP_DIR}/tensorflow-${PKG_VERSION}.dist-info/WHEEL

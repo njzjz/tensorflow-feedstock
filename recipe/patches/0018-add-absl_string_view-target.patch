@@ -1,36 +1,18 @@
 From d6340079592e35b7b6509a22380c707ba7e3a211 Mon Sep 17 00:00:00 2001
 From: "H. Vetinari" <h.vetinari@gmx.com>
 Date: Sun, 12 May 2024 18:45:03 +1100
-Subject: [PATCH 18/44] add absl_string_view target
+Subject: [PATCH 18/44] add cord_internal and string_view target for abseil 20260107
 
----
- third_party/absl/system.absl.strings.BUILD | 14 +++++++++++++-
- 1 file changed, 13 insertions(+), 1 deletion(-)
+In abseil-cpp 20260107:
+- libabsl_string_view.so was merged into libabsl_strings.so; add a
+  :string_view alias target that depends on :strings instead.
+- libabsl_cord_internal.so needs to be explicitly linked.
+  Patch 0003 already adds cordz_functions/cordz_info to cord.
 
 diff --git a/third_party/absl/system.absl.strings.BUILD b/third_party/absl/system.absl.strings.BUILD
-index d04776c98bf..9f537def3d7 100644
 --- a/third_party/absl/system.absl.strings.BUILD
 +++ b/third_party/absl/system.absl.strings.BUILD
-@@ -2,6 +2,18 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
- 
- package(default_visibility = ["//visibility:public"])
- 
-+cc_library(
-+    name = "string_view",
-+    linkopts = ["-labsl_string_view"],
-+    deps = [
-+        "//absl/base",
-+        "//absl/base:config",
-+        "//absl/base:core_headers",
-+        "//absl/base:nullability",
-+        "//absl/base:throw_delegate",
-+    ],
-+)
-+
- cc_library(
-     name = "strings",
-     linkopts = ["-labsl_strings"],
-@@ -26,7 +38,7 @@ cc_library(
+@@ -26,7 +26,7 @@
  
  cc_library(
      name = "cord",
@@ -39,3 +21,15 @@ index d04776c98bf..9f537def3d7 100644
      deps = [
          ":str_format",
          "//absl/container:compressed_tuple",
+@@ -47,3 +47,11 @@
+         "//absl/types:span",
+     ],
+ )
++
++cc_library(
++    name = "string_view",
++    deps = [
++        ":strings",
++        "//absl/base:nullability",
++    ],
++)

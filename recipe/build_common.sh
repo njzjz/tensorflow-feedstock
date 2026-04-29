@@ -167,6 +167,10 @@ else
     export TF_NEED_CUDA=0
 fi
 
+# Older bazel-toolchain versions use bare ${c_compiler} with set -u;
+# set it from $CC if not already set by the conda activation scripts.
+export c_compiler="${c_compiler:-$CC}"
+export cxx_compiler="${cxx_compiler:-$CXX}"
 gen-bazel-toolchain
 
 if [[ "${target_platform}" == "osx-64" ]]; then
