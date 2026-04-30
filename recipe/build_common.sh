@@ -254,7 +254,7 @@ bazel ${BAZEL_OPTS} build ${BUILD_TARGET}
 
 # copy the whl file
 mkdir -p $SRC_DIR/tensorflow_pkg
-cp bazel-bin/tensorflow/tools/pip_package/wheel_house/tensorflow*-cp${PY_VER/./}-*.whl $SRC_DIR/tensorflow_pkg/
+cp bazel-bin/tensorflow/tools/pip_package/wheel_house/tensorflow*-cp${PY_VER/./}-*.whl $SRC_DIR/tensorflow_pkg/ || true
 
 if [[ ! -f "${SRC_DIR}/libtensorflow_cc_output.tar" ]]; then
   # Build libtensorflow(_cc)
