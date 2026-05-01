@@ -80,10 +80,6 @@ source:
 build:
   number: {{ build }}
   skip: true  # [win]
-  # We decided to drop OSX in Jan 2026 due to lack of maintainer
-  # ability to keep it up to date with bazel
-  # https://github.com/conda-forge/tensorflow-feedstock/pull/470
-  skip: true  # [osx]
   # TODO: debug issues with CUDA cross-compilation
   skip: true  # [aarch64 and cuda_compiler_version != "None"]
 

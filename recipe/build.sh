@@ -17,5 +17,6 @@ for ver in 3.9 3.10 3.11 3.12; do
   # copy the bazel downloaded headers to PREFIX
   cp -r $(dirname $python_h_path) $PREFIX/include/python
   bash $RECIPE_DIR/build_common.sh
+  rm -rf $PREFIX/include/python
 done
 bazel clean
