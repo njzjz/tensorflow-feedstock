@@ -145,10 +145,6 @@ outputs:
         - rsync
         - if: cuda_compiler_version != "None"
           then: coreutils
-        - if: build_platform != target_platform
-          then: zlib
-        - if: build_platform != target_platform
-          then: libcurl
       host:
         # GPU requirements for CUDA
         - if: cuda_compiler_version != "None"
