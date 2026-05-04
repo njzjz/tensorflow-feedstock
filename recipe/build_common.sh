@@ -17,6 +17,30 @@ cp ${RECIPE_DIR}/pybind11_protobuf/*.patch ${SRC_DIR}/third_party/pybind11_proto
 
 sed -i.bak "s;@@PREFIX@@;$PREFIX;" third_party/pybind11_protobuf/0002-Add-Python-include-path.patch
 
+# In abseil-cpp 20260107, the template aliases absl::Nonnull<T>, absl::Nullable<T>,
+# and absl::NullabilityUnknown<T> were removed. TF 2.19.1 still uses them in many
+# files. Patch the installed header to re-add the aliases as backward-compat no-ops.
+python3 - << 'PYEOF'
+import os, sys
+path = os.path.join(os.environ["BUILD_PREFIX"], "include", "absl", "base", "nullability.h")
+with open(path, "r") as f:
+    content = f.read()
+if "using Nonnull" not in content:
+    compat = (
+        "\n// Backward-compat aliases removed in abseil-cpp 20260107.\n"
+        "namespace absl {\n"
+        "template <typename T> using Nonnull = T;\n"
+        "template <typename T> using Nullable = T;\n"
+        "template <typename T> using NullabilityUnknown = T;\n"
+        "}  // namespace absl\n"
+    )
+    with open(path, "a") as f:
+        f.write(compat)
+    print(f"Patched {path}")
+else:
+    print(f"Already has Nonnull alias, skipping patch of {path}")
+PYEOF
+
 export PATH="$PWD:$PATH"
 export CC=$(basename $CC)
 export CXX=$(basename $CXX)
