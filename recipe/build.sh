@@ -44,4 +44,5 @@ for ver in 3.9 3.10 3.11 3.12; do
   fi
   bash $RECIPE_DIR/build_common.sh
 done
+
 bazel clean

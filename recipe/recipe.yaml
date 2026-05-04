@@ -7,6 +7,7 @@ context:
   # https://github.com/tensorflow/tensorflow/blob/v2.18.0/third_party/py/ml_dtypes/workspace.bzl
   libml_dtypes_version: "0.5.1"
   ml_dtypes_version: "0.5.1"
+  build_str_prefix: ${{ "cuda" ~ (cuda_compiler_version | replace('.', '')) if cuda_compiler_version != "None" else "cpu_" }}
 
 recipe:
   name: tensorflow-split
@@ -88,10 +89,6 @@ build:
   number: ${{ build + (200 if cuda_compiler_version != "None" else 0) + 25 * ((microarch_level | default("1") | int) - 1) }}
   skip:
     - win
-    # We decided to drop OSX in Jan 2026 due to lack of maintainer
-    # ability to keep it up to date with bazel
-    # https://github.com/conda-forge/tensorflow-feedstock/pull/470
-    - osx
     # TODO: debug issues with CUDA cross-compilation
     - aarch64 and cuda_compiler_version != "None"
 
@@ -196,7 +193,7 @@ outputs:
         - snappy
         - ml_dtypes >=${{ ml_dtypes_version }},<1.0
     build:
-      script: build_staging.sh
+      script: build.sh
 
   - package:
       name: libtensorflow_framework
@@ -207,7 +204,7 @@ outputs:
         - lib/libtensorflow_framework.*.dylib
       skip:
         - win
-      string: ${{ "cuda" ~ (cuda_compiler_version | replace('.', '')) ~ "h" ~ hash ~ "_" ~ build_number if cuda_compiler_version != "None" else "cpu_h" ~ hash ~ "_" ~ build_number }}
+      string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
     requirements:
       ignore_run_exports:
         from_package:
@@ -226,6 +223,81 @@ outputs:
             - test -f $PREFIX/lib/libtensorflow_framework${SHLIB_EXT}
             - test ! -f $PREFIX/lib/libtensorflow${SHLIB_EXT}
 
+  - package:
+      name: libtensorflow
+    inherit: tensorflow-build
+    build:
+      files:
+        - lib/libtensorflow.so*
+        - lib/libtensorflow.*.dylib
+        - include/tensorflow/c/**
+      skip:
+        - win
+      string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
+    requirements:
+      ignore_run_exports:
+        from_package:
+          - python
+      run_exports:
+        # tensorflow makes no ABI guarantees, need to pin to what we built with
+        - libtensorflow ==${{ version }}
+      run:
+        # avoid that people without GPUs needlessly download ~200-300MB
+        - if: cuda_compiler_version != "None"
+          then: __cuda
+        - ${{ pin_subpackage("libtensorflow_framework", exact=True) }}
+    tests:
+      - if: cuda_compiler_version == "None"
+        then:
+          files:
+            recipe:
+              - test_libtensorflow.sh
+              - test_c.c
+          requirements:
+            build:
+              - ${{ compiler("c") }}
+          script:
+            - test -f $PREFIX/lib/libtensorflow${SHLIB_EXT}
+            - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && bash test_libtensorflow.sh || true
+
+  - package:
+      name: libtensorflow_cc
+    inherit: tensorflow-build
+    build:
+      files:
+        - lib/libtensorflow_cc.so*
+        - lib/libtensorflow_cc.*.dylib
+        - include/**
+      skip:
+        - win
+      string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
+    requirements:
+      ignore_run_exports:
+        from_package:
+          - python
+      run_exports:
+        # tensorflow makes no ABI guarantees, need to pin to what we built with
+        - libtensorflow_cc ==${{ version }}
+      run:
+        - libml_dtypes-headers >=${{ libml_dtypes_version }},<0.6
+        # avoid that people without GPUs needlessly download ~200-300MB
+        - if: cuda_compiler_version != "None"
+          then: __cuda
+        - ${{ pin_subpackage("libtensorflow_framework", exact=True) }}
+    tests:
+      - if: cuda_compiler_version == "None"
+        then:
+          files:
+            recipe:
+              - test_libtensorflow_cc.sh
+              - test_cc.cc
+          requirements:
+            build:
+              - ${{ compiler("cxx") }}
+          script:
+            - test -f $PREFIX/lib/libtensorflow_cc${SHLIB_EXT}
+            - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && bash test_libtensorflow_cc.sh || true
+
   # 2021/12/29: hmaarrfk
   # as of tensorflow 2.7.0 we need the tensorflow-base package to break
   # circular dependency when building tensorflow extra packages. This annoying
@@ -242,7 +314,7 @@ outputs:
       # https://github.com/tensorflow/tensorflow/issues/78774
       skip:
         - match(python, "3.13.*")
-      string: ${{ "cuda" ~ (cuda_compiler_version | replace('.', '')) ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number if cuda_compiler_version != "None" else "cpu_py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
+      string: ${{ build_str_prefix ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
       python:
         entry_points:
           - tflite_convert = tensorflow.lite.python.tflite_convert:main
@@ -315,7 +387,7 @@ outputs:
       # https://github.com/tensorflow/tensorflow/issues/78774
       skip:
         - match(python, "3.13.*")
-      string: ${{ "cuda" ~ (cuda_compiler_version | replace('.', '')) ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number if cuda_compiler_version != "None" else "cpu_py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
+      string: ${{ build_str_prefix ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
     requirements:
       host:
         # Require python so that the python version gets populated
@@ -356,85 +428,10 @@ outputs:
           - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && python -c "import tensorflow as tf;graph = tf.function(lambda x:x).get_concrete_function(1.).graph;tf.compat.v1.train.export_meta_graph(graph=graph,graph_def=graph.as_graph_def())" || true
 
   - package:
-      name: libtensorflow
-    inherit: tensorflow-build
-    build:
-      files:
-        - lib/libtensorflow.so*
-        - lib/libtensorflow.*.dylib
-        - include/tensorflow/c/**
-      skip:
-        - win
-      string: ${{ "cuda" ~ (cuda_compiler_version | replace('.', '')) ~ "h" ~ hash ~ "_" ~ build_number if cuda_compiler_version != "None" else "cpu_h" ~ hash ~ "_" ~ build_number }}
-    requirements:
-      ignore_run_exports:
-        from_package:
-          - python
-      run_exports:
-        # tensorflow makes no ABI guarantees, need to pin to what we built with
-        - libtensorflow ==${{ version }}
-      run:
-        # avoid that people without GPUs needlessly download ~200-300MB
-        - if: cuda_compiler_version != "None"
-          then: __cuda
-        - ${{ pin_subpackage("libtensorflow_framework", exact=True) }}
-    tests:
-      - if: cuda_compiler_version == "None"
-        then:
-          files:
-            recipe:
-              - test_libtensorflow.sh
-              - test_c.c
-          requirements:
-            build:
-              - ${{ compiler("c") }}
-          script:
-            - test -f $PREFIX/lib/libtensorflow${SHLIB_EXT}
-            - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && bash test_libtensorflow.sh || true
-
-  - package:
-      name: libtensorflow_cc
-    inherit: tensorflow-build
-    build:
-      files:
-        - lib/libtensorflow_cc.so*
-        - lib/libtensorflow_cc.*.dylib
-        - include/**
-      skip:
-        - win
-      string: ${{ "cuda" ~ (cuda_compiler_version | replace('.', '')) ~ "h" ~ hash ~ "_" ~ build_number if cuda_compiler_version != "None" else "cpu_h" ~ hash ~ "_" ~ build_number }}
-    requirements:
-      ignore_run_exports:
-        from_package:
-          - python
-      run_exports:
-        # tensorflow makes no ABI guarantees, need to pin to what we built with
-        - libtensorflow_cc ==${{ version }}
-      run:
-        - libml_dtypes-headers >=${{ libml_dtypes_version }},<0.6
-        # avoid that people without GPUs needlessly download ~200-300MB
-        - if: cuda_compiler_version != "None"
-          then: __cuda
-        - ${{ pin_subpackage("libtensorflow_framework", exact=True) }}
-    tests:
-      - if: cuda_compiler_version == "None"
-        then:
-          files:
-            recipe:
-              - test_libtensorflow_cc.sh
-              - test_cc.cc
-          requirements:
-            build:
-              - ${{ compiler("cxx") }}
-          script:
-            - test -f $PREFIX/lib/libtensorflow_cc${SHLIB_EXT}
-            - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && bash test_libtensorflow_cc.sh || true
-
-  - package:
       name: tensorflow-cpu
     build:
       script: "true"
-      string: cpu_h${{ hash }}_${{ build_number }}
+      string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
       skip:
         - cuda_compiler_version != "None"
     requirements:
@@ -450,7 +447,7 @@ outputs:
       name: tensorflow-gpu
     build:
       script: "true"
-      string: cuda${{ cuda_compiler_version | replace('.', '') }}h${{ hash }}_${{ build_number }}
+      string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
       skip:
         - cuda_compiler_version == "None"
     requirements:
@@ -471,7 +468,7 @@ outputs:
         # tensorflow 2.18 doesn't support py313 until 2.20, see
         # https://github.com/tensorflow/tensorflow/issues/78774
         - match(python, "3.13.*")
-      string: ${{ "cuda" ~ (cuda_compiler_version | replace('.', '')) ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number if cuda_compiler_version != "None" else "cpu_py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
+      string: ${{ build_str_prefix ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
     requirements:
       host:
         # need to build per python version to pin to exact tensorflow package-hashes corresponding to sse3
@@ -492,7 +489,7 @@ outputs:
         # tensorflow 2.18 doesn't support py313 until 2.20, see
         # https://github.com/tensorflow/tensorflow/issues/78774
         - match(python, "3.13.*")
-      string: ${{ "cuda" ~ (cuda_compiler_version | replace('.', '')) ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number if cuda_compiler_version != "None" else "cpu_py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
+      string: ${{ build_str_prefix ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
     requirements:
       host:
         # need to build per python version to pin to exact tensorflow package-hashes corresponding to avx2
@@ -513,7 +510,7 @@ outputs:
         # tensorflow 2.18 doesn't support py313 until 2.20, see
         # https://github.com/tensorflow/tensorflow/issues/78774
         - match(python, "3.13.*")
-      string: ${{ "cuda" ~ (cuda_compiler_version | replace('.', '')) ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number if cuda_compiler_version != "None" else "cpu_py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
+      string: ${{ build_str_prefix ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
     requirements:
       host:
         # need to build per python version to pin to exact tensorflow package-hashes corresponding to avx512

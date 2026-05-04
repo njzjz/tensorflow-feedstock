@@ -256,39 +256,32 @@ sed -ie "s;BUILD_PREFIX;${BUILD_PREFIX};g" tensorflow/tools/pip_package/build_pi
 # build using bazel
 bazel ${BAZEL_OPTS} build ${BUILD_TARGET}
 
-# build a whl file
+# copy the whl file
 mkdir -p $SRC_DIR/tensorflow_pkg
-whl=$(ls bazel-bin/tensorflow/tools/pip_package/wheel_house/tensorflow*.whl)
-cp_ver=$($PREFIX/bin/python -c "import sys;print(''.join(str(v) for v in sys.version_info[:2]))")
-cp $whl $SRC_DIR/tensorflow_pkg/$(basename ${whl} | sed s@cp${cp_ver}@cp${PY_VER/./}@g) || true
+cp bazel-bin/tensorflow/tools/pip_package/wheel_house/tensorflow*-cp${PY_VER/./}-*.whl $SRC_DIR/tensorflow_pkg/ || true
 
-if [[ ! -f "${SRC_DIR}/libtensorflow_cc_output.tar" ]]; then
+if [[ ! -f "${SRC_DIR}/libtensorflow_built" ]]; then
   # Build libtensorflow(_cc)
-  cp $SRC_DIR/bazel-bin/tensorflow/tools/lib_package/libtensorflow.tar.gz $SRC_DIR
-  mkdir -p $SRC_DIR/libtensorflow_cc_output/lib
-  if [[ "${target_platform}" == osx-* ]]; then
-    cp -RP bazel-bin/tensorflow/libtensorflow_cc.* $SRC_DIR/libtensorflow_cc_output/lib/
-    cp -RP bazel-bin/tensorflow/libtensorflow_framework.* $SRC_DIR/libtensorflow_cc_output/lib/
-  else
-    cp -d bazel-bin/tensorflow/libtensorflow_cc.so* $SRC_DIR/libtensorflow_cc_output/lib/
-    cp -d bazel-bin/tensorflow/libtensorflow_framework.so* $SRC_DIR/libtensorflow_cc_output/lib/
-    cp -d $SRC_DIR/libtensorflow_cc_output/lib/libtensorflow_framework.so.2 $SRC_DIR/libtensorflow_cc_output/lib/libtensorflow_framework.so
-  fi
+  mkdir -p ${PREFIX}/lib
+  mkdir -p ${PREFIX}/include
+  tar -C ${PREFIX} -xzf $SRC_DIR/bazel-bin/tensorflow/tools/lib_package/libtensorflow.tar.gz
+  ls -alh ${PREFIX}/lib
+  ls -alh ${PREFIX}/include
+  cp -RP bazel-bin/tensorflow/libtensorflow_cc.* ${PREFIX}/lib/
   # Make writable so patchelf can do its magic
-  chmod u+w $SRC_DIR/libtensorflow_cc_output/lib/libtensorflow*
+  chmod u+w ${PREFIX}/lib/libtensorflow*
 
-  mkdir -p $SRC_DIR/libtensorflow_cc_output/include/tensorflow
-  rsync -r --chmod=D777,F666 --exclude '_solib*' --exclude '_virtual_includes/' --exclude 'pip_package/' --exclude 'lib_package/' --include '*/' --include '*.h' --include '*.inc' --exclude '*' bazel-bin/ $SRC_DIR/libtensorflow_cc_output/include
-  rsync -r --chmod=D777,F666 --include '*/' --include '*.h' --include '*.inc' --exclude '*' tensorflow/cc $SRC_DIR/libtensorflow_cc_output/include/tensorflow/
-  rsync -r --chmod=D777,F666 --include '*/' --include '*.h' --include '*.inc' --exclude '*' tensorflow/core $SRC_DIR/libtensorflow_cc_output/include/tensorflow/
-  rsync -r --chmod=D777,F666 --include '*/' --include '*.h' --include '*.inc' --exclude '*' third_party/xla/third_party/tsl/ $SRC_DIR/libtensorflow_cc_output/include/
-  rsync -r --chmod=D777,F666 --include '*/' --include '*' --exclude '*.cc' third_party/ $SRC_DIR/libtensorflow_cc_output/include/tensorflow/third_party/
-  rsync -r --chmod=D777,F666 --include '*/' --include '*' --exclude '*.txt' bazel-work/external/eigen_archive/Eigen/ $SRC_DIR/libtensorflow_cc_output/include/tensorflow/third_party/Eigen/
-  rsync -r --chmod=D777,F666 --include '*/' --include '*' --exclude '*.txt' bazel-work/external/eigen_archive/unsupported/ $SRC_DIR/libtensorflow_cc_output/include/tensorflow/third_party/unsupported/
-  pushd $SRC_DIR/libtensorflow_cc_output
-    tar cf ../libtensorflow_cc_output.tar .
-  popd
-  rm -r $SRC_DIR/libtensorflow_cc_output
+  mkdir -p ${PREFIX}/include/tensorflow
+  rsync -r --chmod=D777,F666 --exclude '_solib*' --exclude '_virtual_includes/' --exclude 'pip_package/' --exclude 'lib_package/' --include '*/' --include '*.h' --include '*.inc' --exclude '*' bazel-bin/ ${PREFIX}/include
+  rsync -r --chmod=D777,F666 --include '*/' --include '*.h' --include '*.inc' --exclude '*' tensorflow/cc ${PREFIX}/include/tensorflow/
+  rsync -r --chmod=D777,F666 --include '*/' --include '*.h' --include '*.inc' --exclude '*' tensorflow/core ${PREFIX}/include/tensorflow/
+  rsync -r --chmod=D777,F666 --include '*/' --include '*.h' --include '*.inc' --exclude '*' third_party/xla/third_party/tsl/ ${PREFIX}/include/
+  rsync -r --chmod=D777,F666 --include '*/' --include '*' --exclude '*.cc' third_party/ ${PREFIX}/include/tensorflow/third_party/
+  rsync -r --chmod=D777,F666 --include '*/' --include '*' --exclude '*.txt' bazel-work/external/eigen_archive/Eigen/ ${PREFIX}/include/tensorflow/third_party/Eigen/
+  rsync -r --chmod=D777,F666 --include '*/' --include '*' --exclude '*.txt' bazel-work/external/eigen_archive/unsupported/ ${PREFIX}/include/tensorflow/third_party/unsupported/
+  # Flatten XLA headers from nested external path to top-level include/xla/
+  rsync -av "${PREFIX}/include/external/local_xla/xla/" "${PREFIX}/include/xla/"
+  touch "${SRC_DIR}/libtensorflow_built"
 fi
 
 # This was only needed for protobuf_python
