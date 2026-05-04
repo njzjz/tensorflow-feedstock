@@ -43,6 +43,7 @@ for ver in 3.9 3.10 3.11 3.12; do
     cp -r $(dirname $python_h_path) $PREFIX/include/python
   fi
   bash $RECIPE_DIR/build_common.sh
+  rm -rf $PREFIX/include/python
 done
 
 bazel clean
