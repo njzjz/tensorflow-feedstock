@@ -262,16 +262,23 @@ outputs:
               - ${{ compiler("c") }}
           script:
             - test -f $PREFIX/lib/libtensorflow${SHLIB_EXT}
-            - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && bash test_libtensorflow.sh || true
+            - if: build_platform != target_platform
+              then: bash test_libtensorflow.sh
 
   - package:
       name: libtensorflow_cc
     inherit: tensorflow-build
     build:
       files:
-        - lib/libtensorflow_cc.so*
-        - lib/libtensorflow_cc.*.dylib
-        - include/**
+        include:
+          - lib/libtensorflow_cc.so*
+          - lib/libtensorflow_cc.*.dylib
+          - include/**
+        exclude:
+          - include/tensorflow/c/**
+          - include/tsl/platform/ctstring.h
+          - include/tsl/platform/ctstring_internal.h
+          - include/xla/tsl/c/tsl_status.h
       skip:
         - win
       string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
@@ -300,7 +307,8 @@ outputs:
               - ${{ compiler("cxx") }}
           script:
             - test -f $PREFIX/lib/libtensorflow_cc${SHLIB_EXT}
-            - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && bash test_libtensorflow_cc.sh || true
+            - if: build_platform != target_platform
+              then: bash test_libtensorflow_cc.sh
 
   # 2021/12/29: hmaarrfk
   # as of tensorflow 2.7.0 we need the tensorflow-base package to break
@@ -422,14 +430,16 @@ outputs:
         script:
           - cat test_tensorflow.py
           - test -x $PREFIX/bin/saved_model_cli
-          - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && python test_tensorflow.py || true
-          - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && tf_upgrade_v2 --help || true
-          - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && tflite_convert --help || true
-          - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && toco --help || true
-          - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && test "$cuda_compiler_version" != "None" && python -c 'import tensorflow as tf; assert tf.test.is_built_with_cuda()' || true
-          - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && test "$cuda_compiler_version" = "None" && python -c 'import tensorflow as tf; assert not tf.test.is_built_with_cuda()' || true
-          # See https://github.com/conda-forge/tensorflow-feedstock/issues/364
-          - test "$BUILD_PLATFORM" = "$TARGET_PLATFORM" && python -c "import tensorflow as tf;graph = tf.function(lambda x:x).get_concrete_function(1.).graph;tf.compat.v1.train.export_meta_graph(graph=graph,graph_def=graph.as_graph_def())" || true
+          - if: build_platform == target_platform
+            then:
+              - python test_tensorflow.py
+              - tf_upgrade_v2 --help
+              - tflite_convert --help
+              - toco --help
+              - test "${{ cuda_compiler_version }}" != "None" && python -c 'import tensorflow as tf; assert tf.test.is_built_with_cuda()'
+              - test "${{ cuda_compiler_version }}" = "None" && python -c 'import tensorflow as tf; assert not tf.test.is_built_with_cuda()'
+              # See https://github.com/conda-forge/tensorflow-feedstock/issues/364
+              - python -c "import tensorflow as tf;graph = tf.function(lambda x:x).get_concrete_function(1.).graph;tf.compat.v1.train.export_meta_graph(graph=graph,graph_def=graph.as_graph_def())"
 
   - package:
       name: tensorflow-cpu
