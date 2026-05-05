@@ -115,7 +115,8 @@ outputs:
             - libpng
             - flatbuffers
             - onednn
-            - onednn-cpu-threadpool
+            - if: linux
+              then: onednn-cpu-threadpool
             - pybind11
             - numpy
             - zlib
@@ -231,6 +232,9 @@ outputs:
         - lib/libtensorflow.so*
         - lib/libtensorflow.*.dylib
         - include/tensorflow/c/**
+        - include/tsl/platform/ctstring.h
+        - include/tsl/platform/ctstring_internal.h
+        - include/xla/tsl/c/tsl_status.h
       skip:
         - win
       string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
