@@ -273,6 +273,9 @@ if [[ ! -f "${SRC_DIR}/libtensorflow_built" ]]; then
   ls -alh ${PREFIX}/lib
   ls -alh ${PREFIX}/include
   cp -RP bazel-bin/tensorflow/libtensorflow_cc.* ${PREFIX}/lib/
+  if [[ "${target_platform}" == osx-* ]]; then
+    ln -sf ${PREFIX}/lib/libtensorflow_framework.2.dylib ${PREFIX}/lib/libtensorflow_framework.dylib
+  fi
   # Make writable so patchelf can do its magic
   chmod u+w ${PREFIX}/lib/libtensorflow*
 
