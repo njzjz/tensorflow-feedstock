@@ -202,7 +202,7 @@ outputs:
     build:
       files:
         - lib/libtensorflow_framework.so*
-        - lib/libtensorflow_framework.*.dylib
+        - lib/libtensorflow_framework.*dylib
       skip:
         - win
       string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
