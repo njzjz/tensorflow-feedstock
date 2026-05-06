@@ -272,7 +272,7 @@ outputs:
       files:
         include:
           - lib/libtensorflow_cc.so*
-          - lib/libtensorflow_cc.*.dylib
+          - lib/libtensorflow_cc.*dylib
           - include/**
         exclude:
           - include/tensorflow/c/**
