@@ -1,0 +1,18 @@
+From d4921a8bc3d947d0cb3a7cb3f0b58ed52b49e9eb Mon Sep 17 00:00:00 2001
+From: Filippo Luca Ferretti <filippoluca.ferretti@outlook.com>
+Date: Fri, 27 Mar 2026 17:38:01 +0100
+Subject: [PATCH] Add missing #include <string> in custom_call_status_internal.h
+
+With newer libabseil (20260107+), absl/strings/string_view.h no longer
+transitively includes <string>, only bringing in the forward declaration
+via <iosfwd>. This causes a compilation failure when <optional> tries
+to instantiate optional<std::string> with only an incomplete type.
+
+--- a/third_party/xla/xla/service/custom_call_status_internal.h
++++ b/third_party/xla/xla/service/custom_call_status_internal.h
+@@ -16,6 +16,7 @@ limitations under the License.
+
+ #include <optional>
++#include <string>
+
+ #include "absl/strings/string_view.h"

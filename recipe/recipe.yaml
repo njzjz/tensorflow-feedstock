@@ -1,0 +1,565 @@
+schema_version: 1
+
+context:
+  version: "2.19.1"
+  build: 5
+  # Quite often libml_dtypes-headers and ml_dtypes diverge.
+  # https://github.com/tensorflow/tensorflow/blob/v2.18.0/third_party/py/ml_dtypes/workspace.bzl
+  libml_dtypes_version: "0.5.1"
+  ml_dtypes_version: "0.5.1"
+  build_str_prefix: ${{ "cuda" ~ (cuda_compiler_version | replace('.', '')) if cuda_compiler_version != "None" else "cpu_" }}
+
+recipe:
+  name: tensorflow-split
+  version: ${{ version }}
+
+source:
+  - url: https://github.com/tensorflow/tensorflow/archive/refs/tags/v${{ version | replace(".rc", "-rc") }}.tar.gz
+    sha256: fcfb3e88ab3eebdbab98a03c869a4d2616d52ea166c8d8021de1ef921b47be8d
+    patches:
+      - patches/0001-loosen-requirements.patch
+      - patches/0002-Add-additional-absl_synchronization-linkage-to-gRPC.patch
+      - patches/0003-Fix-missing-abseil-linkages.patch
+      - patches/0004-Fix-protobuf_python-for-systemlibs.patch
+      - patches/0005-Add-absl_log-systemlib.patch
+      - patches/0006-Omit-linking-to-layout_proto_cc-if-protobuf-linkage-.patch
+      - patches/0007-Fix-further-abseil-linkage.patch
+      - patches/0008-Add-constraint-to-pybind11-systemlib.patch
+      - patches/0009-Different-file-ending-for-flatbuffers-LICENSE.patch
+      - patches/0010-Use-correct-hermetic-python.patch
+      - patches/0011-Add-well_known_types_py_pb2-to-protobuf-systemlib.patch
+      - patches/0012-Add-protobuf-toolchain.patch
+      - patches/0013-fix-genproto.patch
+      - if: cuda_compiler_version != "None" and cuda_compiler_version[:2] == "11"
+        then:
+          - patches/0014-Remove-some-usage-of-absl-str_format-in-CUDA.patch
+          - patches/0015-Adjust-relative-path-for-libdevice.patch
+      - patches/0016-Link-to-absl_log_flags-instead-of-absl_flags.patch
+      - patches/0017-Update-ABSL-Log-Definition-for-libabsl_vlog_config_i.patch
+      - patches/0018-add-absl_string_view-target.patch
+      - patches/0019-add-absl_nullability-target.patch
+      - patches/0020-add-absl_prefetch-target.patch
+      - patches/0021-add-absl_die_if_null-target.patch
+      - patches/0022-add-absl_crc32c-targets.patch
+      - patches/0023-add-kernel_timeout_internal-target.patch
+      - patches/0024-work-around-for-warning-that-clang-falsely-treats-as.patch
+      - patches/0025-Hardcode-BUILD_PREFIX-in-build_pip_package.patch
+      - patches/0026-Only-link-to-sparse_core_layout_proto_cc-headers.patch
+      - patches/0027-Protobuf-5-compatability.patch
+      # https://github.com/tensorflow/tensorflow/pull/86413
+      - patches/0028-Avoid-linking-with-internal-nvrtc.patch
+      - patches/0029-remove-dependencies-to-libcuda.patch
+      # adjust patch 0004 for newer absl -- hmaarrfk - 2025/07/06
+      - patches/0030-Fixup-pybind11_protobuf.patch
+      - patches/0031-Update-linkages-for-new-absl-organization.patch
+      # Already included in the release after 2.19.0
+      - patches/0032-Remove-ambiguous-inherited-constructor-in-default_qu.patch
+      # these came from https://git.yoctoproject.org/meta-tensorflow/tree/recipes-framework/tensorflow/files
+      # check every release there for patches in the future
+      # - patches/0033-third_party-ducc-fix-ambiguous-failure.patch
+      # - patches/0034-third_party-tf_runtime-fix-compile-failure.patch
+      # - patches/0035-support-to-build-with-gcc-15.patch
+      - patches/0036-third_party-eigen_archive-workaround-ice-failure-whi.patch
+      # for our system absl
+      - patches/0037-add-absl_tracing_internal.patch
+      # for the megabuild
+      - patches/0038-Fix-building-different-python-wheels-from-one-python.patch
+      - patches/0039-Fix-matmul-unused-result-error.patch
+      - patches/0040-Support-cuda-12.8.patch
+      - patches/0041-Disable-profiler.patch
+      - if: aarch64 and target_platform != build_platform
+        then: patches/0042-cross-arch-config.patch
+      # backport https://github.com/openxla/xla/pull/22572 into vendored xla
+      - patches/0044-PR-22572-Fix-build-break-in-convolution_thunk_intern.patch
+      - if: aarch64 and target_platform != build_platform
+        then: patches/0045-Force-python-wheel-architecture-to-aarch64.patch
+      # missing <string> include with newer libabseil (20260107+)
+      - patches/0046-Add-missing-string-include-in-custom_call_status_int.patch
+      # missing <cstring> in vendored re2 with newer absl/GCC 14;
+      # adds patch_cmds support to tf_http_archive
+      - patches/0047-Add-patch_cmds-to-tf_http_archive-and-fix-re2-cstrin.patch
+      # absl_low_level_hash merged into absl_hash in libabseil 20260107
+      - patches/0048-Remove-absl_low_level_hash-merged-into-absl_hash-in-.patch
+      # absl::Nonnull (nullability) missing from TSL system absl base BUILD
+      - patches/0049-add-absl_nullability-to-tsl-system-absl-base-BUILD.patch
+      - patches/0051-Add-nullability-dep-to-absl-base-system-BUILD.patch
+      - patches/0053-Add-missing-string-include-in-nvtx_utils.patch
+
+build:
+  number: ${{ build + (200 if cuda_compiler_version != "None" else 0) + 25 * ((microarch_level | default("1") | int) - 1) }}
+  skip:
+    - win
+    # TODO: debug issues with CUDA cross-compilation
+    - aarch64 and cuda_compiler_version != "None"
+
+outputs:
+  # Staging output: runs the full Bazel build and installs all artifacts to
+  # $PREFIX. No .conda package is produced; inheriting outputs select their
+  # files via build.files (C libraries) or install via script (Python wheel).
+  - staging:
+      name: tensorflow-build
+    requirements:
+      build:
+        - if: linux
+          then: perl
+        - if: build_platform != target_platform
+          then:
+            - python 3.12.*
+            - cython
+            - cross-python_${{ target_platform }}
+            - nsync
+            - snappy
+            - giflib
+            - libjpeg-turbo
+            - icu
+            - libpng
+            - flatbuffers
+            - onednn
+            - if: linux
+              then: onednn-cpu-threadpool
+            - pybind11
+            - numpy
+            - zlib
+            - libcurl
+        - ${{ compiler("c") }}
+        - ${{ stdlib("c") }}
+        - ${{ compiler("cxx") }}
+        # Keep the cuda compiler here since it helps package solvers
+        # decide on the cuda variant
+        # https://github.com/conda-forge/tensorflow-feedstock/issues/162
+        - if: cuda_compiler_version != "None"
+          then: ${{ compiler("cuda") }}
+        - if: linux and x86_64
+          then: x86_64-microarch-level ==${{ microarch_level | default("1") }}
+        - bazel 6.*
+        - bazel-toolchain
+        - if: osx
+          then: bazel-toolchain <0.3
+        - libgrpc
+        - libprotobuf
+        - nasm
+        - patchelf
+        - sed
+        - rsync
+        - if: cuda_compiler_version != "None"
+          then: coreutils
+      host:
+        # GPU requirements for CUDA
+        - if: cuda_compiler_version != "None"
+          then:
+            - cudnn
+            - nccl
+            - cuda-version ${{ cuda_compiler_version }}.*
+        - if: cuda_compiler_version != "None" and cuda_compiler_version[:2] == "12"
+          then:
+            - cuda-cupti-dev
+            - cuda-cudart-dev
+            - cuda-nvml-dev
+            - cuda-nvtx-dev
+            - libcublas-dev
+            - libcusolver-dev
+            - libcurand-dev
+            - libcufft-dev
+            - libcusparse-dev
+            - libnvjitlink-dev
+        # If 3.12 is changed, edit recipe/build_pkg.sh too
+        - python 3.12.*
+        - pip
+        - setuptools
+        - packaging
+        - zlib
+        - libpng
+        - libcurl
+        - if: not win
+          then:
+            - unzip
+            - zip
+        - openjdk >=8
+        - nsync
+        # TF_SYSTEM_LIBS
+        - libabseil
+        - astor
+        - cython
+        - dill
+        - giflib
+        - libgrpc
+        - flatbuffers
+        - icu
+        - libjpeg-turbo
+        - libprotobuf
+        - libprotobuf-python-headers
+        - openssl
+        - pybind11
+        - sqlite
+        - snappy
+        - ml_dtypes >=${{ ml_dtypes_version }},<1.0
+    build:
+      script: build.sh
+
+  - package:
+      name: libtensorflow_framework
+    inherit: tensorflow-build
+    build:
+      files:
+        - lib/libtensorflow_framework.so*
+        - lib/libtensorflow_framework.*dylib
+      skip:
+        - win
+      string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
+    requirements:
+      ignore_run_exports:
+        from_package:
+          - python
+      run_exports:
+        # tensorflow makes no ABI guarantees, need to pin to what we built with
+        - libtensorflow_framework ==${{ version }}
+      run:
+        # avoid that people without GPUs needlessly download ~200-300MB
+        - if: cuda_compiler_version != "None"
+          then: __cuda
+    tests:
+      - if: cuda_compiler_version == "None"
+        then:
+          script:
+            - test -f $PREFIX/lib/libtensorflow_framework${SHLIB_EXT}
+            - test ! -f $PREFIX/lib/libtensorflow${SHLIB_EXT}
+
+  - package:
+      name: libtensorflow
+    inherit: tensorflow-build
+    build:
+      files:
+        - lib/libtensorflow.so*
+        - lib/libtensorflow.*dylib
+        - include/tensorflow/c/**
+        - include/tsl/platform/ctstring.h
+        - include/tsl/platform/ctstring_internal.h
+        - include/xla/tsl/c/tsl_status.h
+      skip:
+        - win
+      string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
+    requirements:
+      ignore_run_exports:
+        from_package:
+          - python
+      run_exports:
+        # tensorflow makes no ABI guarantees, need to pin to what we built with
+        - libtensorflow ==${{ version }}
+      run:
+        # avoid that people without GPUs needlessly download ~200-300MB
+        - if: cuda_compiler_version != "None"
+          then: __cuda
+        - ${{ pin_subpackage("libtensorflow_framework", exact=True) }}
+    tests:
+      - if: cuda_compiler_version == "None"
+        then:
+          files:
+            recipe:
+              - test_libtensorflow.sh
+              - test_c.c
+          requirements:
+            build:
+              - ${{ compiler("c") }}
+          script:
+            - test -f $PREFIX/lib/libtensorflow${SHLIB_EXT}
+            - if: build_platform != target_platform
+              then: bash test_libtensorflow.sh
+
+  - package:
+      name: libtensorflow_cc
+    inherit: tensorflow-build
+    build:
+      files:
+        include:
+          - lib/libtensorflow_cc.so*
+          - lib/libtensorflow_cc.*dylib
+          - include/**
+        exclude:
+          - include/tensorflow/c/**
+          - include/tsl/platform/ctstring.h
+          - include/tsl/platform/ctstring_internal.h
+          - include/xla/tsl/c/tsl_status.h
+      skip:
+        - win
+      string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
+    requirements:
+      ignore_run_exports:
+        from_package:
+          - python
+      run_exports:
+        # tensorflow makes no ABI guarantees, need to pin to what we built with
+        - libtensorflow_cc ==${{ version }}
+      run:
+        - libml_dtypes-headers >=${{ libml_dtypes_version }},<0.6
+        # avoid that people without GPUs needlessly download ~200-300MB
+        - if: cuda_compiler_version != "None"
+          then: __cuda
+        - ${{ pin_subpackage("libtensorflow_framework", exact=True) }}
+    tests:
+      - if: cuda_compiler_version == "None"
+        then:
+          files:
+            recipe:
+              - test_libtensorflow_cc.sh
+              - test_cc.cc
+          requirements:
+            build:
+              - ${{ compiler("cxx") }}
+          script:
+            - test -f $PREFIX/lib/libtensorflow_cc${SHLIB_EXT}
+            - if: build_platform != target_platform
+              then: bash test_libtensorflow_cc.sh
+
+  # 2021/12/29: hmaarrfk
+  # as of tensorflow 2.7.0 we need the tensorflow-base package to break
+  # circular dependency when building tensorflow extra packages. This annoying
+  # circularity is broken upstream by the fact that they have to bootstrap
+  # their builds.
+  - package:
+      name: tensorflow-base
+    inherit:
+      from: tensorflow-build
+      run_exports: false
+    build:
+      script: build_pkg.sh
+      # tensorflow 2.18 doesn't support py313 until 2.20, see
+      # https://github.com/tensorflow/tensorflow/issues/78774
+      skip:
+        - match(python, "3.13.*")
+      string: ${{ build_str_prefix ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
+      python:
+        entry_points:
+          - tflite_convert = tensorflow.lite.python.tflite_convert:main
+          - toco = tensorflow.lite.python.tflite_convert:main
+          - saved_model_cli = tensorflow.python.tools.saved_model_cli:main
+          - import_pb_to_tensorboard = tensorflow.python.tools.import_pb_to_tensorboard:main
+          # The tensorboard package adds this entry point.
+          # - tensorboard = tensorboard.main:run_main
+          - tf_upgrade_v2 = tensorflow.tools.compatibility.tf_upgrade_v2_main:main
+    requirements:
+      # build requirements need to pick up the compiler run_exports (libgcc-ng etc.)
+      build:
+        - ${{ compiler("c") }}
+        - ${{ stdlib("c") }}
+        - ${{ compiler("cxx") }}
+        - if: cuda_compiler_version != "None"
+          then: ${{ compiler("cuda") }}
+        - if: linux and x86_64
+          then: x86_64-microarch-level ==${{ microarch_level | default("1") }}
+        - if: build_platform != target_platform
+          then:
+            - python
+            - cross-python_${{ target_platform }}
+      host:
+        # pip install of the pre-built wheel only needs Python tooling
+        - python
+        - pip
+        - setuptools
+        - packaging
+        - wheel
+      run:
+        - python
+        - packaging
+        - absl-py >=1.0.0
+        - astunparse >=1.6.0
+        - gast >=0.2.1,!=0.5.0,!=0.5.1,!=0.5.2
+        - google-pasta >=0.1.1
+        - grpcio ${{ libgrpc }}.*
+        - h5py >=3.11
+        - ml_dtypes >=${{ ml_dtypes_version }},<1.0
+        - opt_einsum >=2.3.2
+        - protobuf >=5.26
+        - python-flatbuffers >=24.3.25
+        - requests >=2.21.0,<3
+        - six >=1.12
+        - termcolor >=1.1.0
+        - typing_extensions >=3.6.6
+        - wrapt >=1.11.0
+        # TF-API needs to move in sync
+        - tensorboard >=2.19,<2.20
+        - keras >=3.5
+        # avoid that people without GPUs needlessly download ~0.5-1GB
+        - if: cuda_compiler_version != "None"
+          then: __cuda
+        # https://github.com/conda-forge/tensorflow-feedstock/issues/296#issuecomment-1835781851
+        - if: cuda_compiler_version != "None" and cuda_compiler_version[:2] == "12"
+          then: cuda-nvcc-tools
+        - ${{ pin_subpackage("libtensorflow_framework", exact=True) }}
+        - ${{ pin_subpackage("libtensorflow_cc", exact=True) }}
+    tests:
+      - script:
+          - exit 0
+
+  - package:
+      name: tensorflow
+    build:
+      # Meta-package: no-op script to avoid falling back to build.sh
+      script: "true"
+      # tensorflow 2.18 doesn't support py313 until 2.20, see
+      # https://github.com/tensorflow/tensorflow/issues/78774
+      skip:
+        - match(python, "3.13.*")
+      string: ${{ build_str_prefix ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
+    requirements:
+      host:
+        # Require python so that the python version gets populated
+        - python
+        # Keep the cuda version here since it helps package solvers
+        # decide on the cuda variant
+        - if: cuda_compiler_version != "None"
+          then: cuda-version ${{ cuda_compiler_version }}.*
+      run:
+        - python
+        - ${{ pin_subpackage("tensorflow-base", exact=True) }}
+        # avoid that people without GPUs needlessly download ~0.5-1GB
+        # This also helps mamba give preference to the CPU build
+        - if: cuda_compiler_version != "None"
+          then: __cuda
+    tests:
+      - python:
+          imports:
+            - if: build_platform == target_platform
+              then: tensorflow
+          pip_check: true
+      - files:
+          recipe:
+            - test_tensorflow.py
+        requirements:
+          run:
+            - pip
+        script:
+          - cat test_tensorflow.py
+          - test -x $PREFIX/bin/saved_model_cli
+          - if: build_platform == target_platform
+            then:
+              - python test_tensorflow.py
+              - tf_upgrade_v2 --help
+              - tflite_convert --help
+              - toco --help
+              - test "${{ cuda_compiler_version }}" != "None" && python -c 'import tensorflow as tf; assert tf.test.is_built_with_cuda()'
+              - test "${{ cuda_compiler_version }}" = "None" && python -c 'import tensorflow as tf; assert not tf.test.is_built_with_cuda()'
+              # See https://github.com/conda-forge/tensorflow-feedstock/issues/364
+              - python -c "import tensorflow as tf;graph = tf.function(lambda x:x).get_concrete_function(1.).graph;tf.compat.v1.train.export_meta_graph(graph=graph,graph_def=graph.as_graph_def())"
+
+  - package:
+      name: tensorflow-cpu
+    build:
+      script: "true"
+      string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
+      skip:
+        - cuda_compiler_version != "None"
+    requirements:
+      run:
+        - ${{ pin_subpackage("tensorflow", exact=True) }}
+    tests:
+      - python:
+          imports:
+            - if: build_platform == target_platform
+              then: tensorflow
+
+  - package:
+      name: tensorflow-gpu
+    build:
+      script: "true"
+      string: ${{ build_str_prefix ~ "h" ~ hash ~ "_" ~ build_number }}
+      skip:
+        - cuda_compiler_version == "None"
+    requirements:
+      run:
+        - ${{ pin_subpackage("tensorflow", exact=True) }}
+    tests:
+      - python:
+          imports:
+            - if: build_platform == target_platform
+              then: tensorflow
+
+  - package:
+      name: tensorflow-sse3
+    build:
+      script: "true"
+      skip:
+        - (not x86_64) or (microarch_level | default("1") | int) != 1
+        # tensorflow 2.18 doesn't support py313 until 2.20, see
+        # https://github.com/tensorflow/tensorflow/issues/78774
+        - match(python, "3.13.*")
+      string: ${{ build_str_prefix ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
+    requirements:
+      host:
+        # need to build per python version to pin to exact tensorflow package-hashes corresponding to sse3
+        - python
+      run:
+        - ${{ pin_subpackage("tensorflow", exact=True) }}
+    tests:
+      - python:
+          imports:
+            - tensorflow
+
+  - package:
+      name: tensorflow-avx2
+    build:
+      script: "true"
+      skip:
+        - (not x86_64) or (microarch_level | default("1") | int) != 3
+        # tensorflow 2.18 doesn't support py313 until 2.20, see
+        # https://github.com/tensorflow/tensorflow/issues/78774
+        - match(python, "3.13.*")
+      string: ${{ build_str_prefix ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
+    requirements:
+      host:
+        # need to build per python version to pin to exact tensorflow package-hashes corresponding to avx2
+        - python
+      run:
+        - ${{ pin_subpackage("tensorflow", exact=True) }}
+    tests:
+      - python:
+          imports:
+            - tensorflow
+
+  - package:
+      name: tensorflow-avx512
+    build:
+      script: "true"
+      skip:
+        - (not x86_64) or (microarch_level | default("1") | int) != 4
+        # tensorflow 2.18 doesn't support py313 until 2.20, see
+        # https://github.com/tensorflow/tensorflow/issues/78774
+        - match(python, "3.13.*")
+      string: ${{ build_str_prefix ~ "py" ~ (python | version_to_buildstring) ~ "h" ~ hash ~ "_" ~ build_number }}
+    requirements:
+      host:
+        # need to build per python version to pin to exact tensorflow package-hashes corresponding to avx512
+        - python
+      run:
+        - ${{ pin_subpackage("tensorflow", exact=True) }}
+    tests:
+      - python:
+          imports:
+            - tensorflow
+
+about:
+  homepage: http://tensorflow.org/
+  license: Apache-2.0
+  license_file: LICENSE
+  summary: TensorFlow is an end-to-end open source platform for machine learning.
+  description: |
+    TensorFlow offers multiple levels of abstraction so you can choose the
+    right one for your needs. Build and train models by using the high-level
+    Keras API, which makes getting started with TensorFlow and machine learning
+    easy.
+  repository: https://github.com/tensorflow/tensorflow
+  documentation: https://www.tensorflow.org/get_started/get_started
+
+extra:
+  recipe-maintainers:
+    - isuruf
+    - ngam
+    - farhantejani
+    - ghego
+    - h-vetinari
+    - hajapy
+    - jschueller
+    - njzjz
+    - waitingkuo
+    - xhochy
+    - hmaarrfk
+    - wolfv

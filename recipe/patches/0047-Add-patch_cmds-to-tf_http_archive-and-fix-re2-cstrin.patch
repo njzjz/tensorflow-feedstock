@@ -1,0 +1,99 @@
+From d4921a8bc3d947d0cb3a7cb3f0b58ed52b49e9eb Mon Sep 17 00:00:00 2001
+From: Filippo Luca Ferretti <filippoluca.ferretti@outlook.com>
+Date: Fri, 27 Mar 2026 17:38:01 +0100
+Subject: [PATCH] Add patch_cmds to tf_http_archive and fix re2 cstring
+
+With newer libabseil (20260107+) and GCC 14, absl headers no longer
+transitively include <cstring>, causing 'memchr' to be undeclared in
+re2/prog.h. Add patch_cmds support to all three copies of
+_tf_http_archive (third_party/repo.bzl, third_party/xla/third_party/repo.bzl,
+and third_party/xla/third_party/tsl/third_party/repo.bzl which is the
+one actually loaded by tsl_workspace2.bzl as @local_tsl//third_party:repo.bzl).
+Apply the fix to both re2 entries (in tsl_workspace2.bzl and tensorflow/workspace2.bzl).
+
+diff --git a/third_party/repo.bzl b/third_party/repo.bzl
+--- a/third_party/repo.bzl
++++ b/third_party/repo.bzl
+@@ -81,6 +81,8 @@
+                 patch_file = ctx.path(Label(patch_file)) if patch_file else None
+                 if patch_file:
+                     ctx.patch(patch_file, strip = 1)
++        for cmd in ctx.attr.patch_cmds:
++            ctx.execute(["bash", "-c", cmd], quiet = False)
+ 
+     for dst, src in link_dict.items():
+         ctx.delete(dst)
+@@ -94,6 +96,7 @@
+         "strip_prefix": attr.string(),
+         "type": attr.string(),
+         "patch_file": attr.string_list(),
++        "patch_cmds": attr.string_list(default = []),
+         "build_file": attr.string(),
+         "system_build_file": attr.string(),
+         "link_files": attr.string_dict(),
+diff --git a/third_party/xla/third_party/repo.bzl b/third_party/xla/third_party/repo.bzl
+--- a/third_party/xla/third_party/repo.bzl
++++ b/third_party/xla/third_party/repo.bzl
+@@ -81,6 +81,8 @@
+                 patch_file = ctx.path(Label(patch_file)) if patch_file else None
+                 if patch_file:
+                     ctx.patch(patch_file, strip = 1)
++        for cmd in ctx.attr.patch_cmds:
++            ctx.execute(["bash", "-c", cmd], quiet = False)
+ 
+     for dst, src in link_dict.items():
+         ctx.delete(dst)
+@@ -94,6 +96,7 @@
+         "strip_prefix": attr.string(),
+         "type": attr.string(),
+         "patch_file": attr.string_list(),
++        "patch_cmds": attr.string_list(default = []),
+         "build_file": attr.string(),
+         "system_build_file": attr.string(),
+         "link_files": attr.string_dict(),
+diff --git a/third_party/xla/third_party/tsl/third_party/repo.bzl b/third_party/xla/third_party/tsl/third_party/repo.bzl
+--- a/third_party/xla/third_party/tsl/third_party/repo.bzl
++++ b/third_party/xla/third_party/tsl/third_party/repo.bzl
+@@ -81,6 +81,8 @@
+                 patch_file = ctx.path(Label(patch_file)) if patch_file else None
+                 if patch_file:
+                     ctx.patch(patch_file, strip = 1)
++        for cmd in ctx.attr.patch_cmds:
++            ctx.execute(["bash", "-c", cmd], quiet = False)
+ 
+     for dst, src in link_dict.items():
+         ctx.delete(dst)
+@@ -94,6 +96,7 @@
+         "strip_prefix": attr.string(),
+         "type": attr.string(),
+         "patch_file": attr.string_list(),
++        "patch_cmds": attr.string_list(default = []),
+         "build_file": attr.string(),
+         "system_build_file": attr.string(),
+         "link_files": attr.string_dict(),
+diff --git a/tensorflow/workspace2.bzl b/tensorflow/workspace2.bzl
+--- a/tensorflow/workspace2.bzl
++++ b/tensorflow/workspace2.bzl
+@@ -295,6 +295,9 @@
+         name = "com_googlesource_code_re2",
+         sha256 = "ef516fb84824a597c4d5d0d6d330daedb18363b5a99eda87d027e6bdd9cba299",
+         strip_prefix = "re2-03da4fc0857c285e3a26782f6bc8931c4c950df4",
++        patch_cmds = [
++            "sed -i 's|#include <string>|#include <string>\\n#include <cstring>|' re2/prog.h",
++        ],
+         system_build_file = "//third_party/systemlibs:re2.BUILD",
+         urls = tf_mirror_urls("https://github.com/google/re2/archive/03da4fc0857c285e3a26782f6bc8931c4c950df4.tar.gz"),
+     )
+diff --git a/third_party/xla/tsl_workspace2.bzl b/third_party/xla/tsl_workspace2.bzl
+--- a/third_party/xla/tsl_workspace2.bzl
++++ b/third_party/xla/tsl_workspace2.bzl
+@@ -226,6 +226,9 @@
+         name = "com_googlesource_code_re2",
+         sha256 = "ef516fb84824a597c4d5d0d6d330daedb18363b5a99eda87d027e6bdd9cba299",
+         strip_prefix = "re2-03da4fc0857c285e3a26782f6bc8931c4c950df4",
++        patch_cmds = [
++            "sed -i 's|#include <string>|#include <string>\\n#include <cstring>|' re2/prog.h",
++        ],
+         system_build_file = "@local_tsl//third_party/systemlibs:re2.BUILD",
+         urls = tf_mirror_urls("https://github.com/google/re2/archive/03da4fc0857c285e3a26782f6bc8931c4c950df4.tar.gz"),
+     )
