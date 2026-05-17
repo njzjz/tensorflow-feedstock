@@ -386,8 +386,10 @@ outputs:
         - termcolor >=1.1.0
         - typing_extensions >=3.6.6
         - wrapt >=1.11.0
-        # TF-API needs to move in sync
-        - tensorboard >=2.21,<2.22
+        # TF-API needs to move in sync. TensorFlow 2.21.0 does not declare
+        # tensorboard as a runtime dep at all; its CI pins tensorboard ~=2.20.0,
+        # i.e. >=2.20.0,<2.21. No tensorboard 2.21 has been released.
+        - tensorboard >=2.20,<2.21
         - keras >=3.12.0
         # avoid that people without GPUs needlessly download ~0.5-1GB
         - if: cuda_compiler_version != "None"
