@@ -12,6 +12,11 @@ fi
 # These files will be deleted at the end of the build.
 mkdir -p $PREFIX/include/python
 cp -r $PREFIX/include/google $PREFIX/include/python/
+# pybind11_protobuf's proto_api.h includes <Python.h>; make the host
+# python headers reachable on the same -I$PREFIX/include/python path.
+for _pyinc in $PREFIX/include/python3.*; do
+  [ -d "$_pyinc" ] && cp -rn "$_pyinc"/. $PREFIX/include/python/ 2>/dev/null || true
+done
 
 cp ${RECIPE_DIR}/pybind11_protobuf/*.patch ${SRC_DIR}/third_party/pybind11_protobuf/.
 
@@ -79,9 +84,6 @@ export TF_SYSTEM_LIBS="
   snappy
   zlib
   "
-sed -i -e "s/GRPCIO_VERSION/${libgrpc}/" tensorflow/tools/pip_package/setup.py
-sed -i -e "s/<6.0.0dev/<7.0.0dev/g" tensorflow/tools/pip_package/setup.py
-
 # do not build with MKL support
 export TF_NEED_MKL=0
 export BAZEL_MKL_OPT=""
@@ -104,7 +106,19 @@ fi
 if [[ "${target_platform}" == osx-* ]]; then
   export LDFLAGS="${LDFLAGS} -lz -framework CoreFoundation -Xlinker -undefined -Xlinker dynamic_lookup"
 else
-  export LDFLAGS="${LDFLAGS} -lrt"
+  # TF 2.21.0's cc_shared_library does not forward the systemlib
+  # cc_library linkopts, so the libtensorflow*.so end up with no DT_NEEDED
+  # for the systemized third-party libraries they reference:
+  # libtensorflow_framework.so's op-generator genrule tools crash dlopen-ing
+  # it, and libtensorflow_cc.so fails to link with tens of thousands of
+  # undefined symbols (protobuf, grpc, sqlite3, icu, png, jpeg, gif,
+  # flatbuffers). Explicitly force-link every systemized library; abseil
+  # ships ~90 shared objects, so enumerate them.
+  _absl_libs=""
+  for _f in "${PREFIX}"/lib/libabsl_*.so; do
+    [ -e "$_f" ] && _absl_libs="${_absl_libs} -l$(basename "$_f" .so | sed 's/^lib//')"
+  done
+  export LDFLAGS="${LDFLAGS} -lrt -Wl,--export-dynamic -Wl,--no-as-needed -lprotobuf -lgrpc -lgrpc++ -lgpr -lsqlite3 -lpng -ljpeg -lgif -lflatbuffers -licui18n -licuuc -licudata -lsnappy -lcurl -lz -lssl -lcrypto${_absl_libs}"
 fi
 
 if [[ ${cuda_compiler_version} != "None" ]]; then
@@ -128,8 +142,13 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
 
     export LDFLAGS="${LDFLAGS//-Wl,-z,now/-Wl,-z,lazy}"
 
-    if [[ "${cuda_compiler_version}" == 12* ]]; then
-        export HERMETIC_CUDA_COMPUTE_CAPABILITIES=sm_60,sm_70,sm_75,sm_80,sm_86,sm_89,sm_90,sm_100,sm_120,compute_120
+    if [[ "${cuda_compiler_version}" == 12* || "${cuda_compiler_version}" == 13* ]]; then
+        if [[ "${cuda_compiler_version}" == 13* ]]; then
+            # CUDA 13 dropped support for compute capabilities below sm_75
+            export HERMETIC_CUDA_COMPUTE_CAPABILITIES=sm_75,sm_80,sm_86,sm_89,sm_90,sm_100,sm_120,compute_120
+        else
+            export HERMETIC_CUDA_COMPUTE_CAPABILITIES=sm_60,sm_70,sm_75,sm_80,sm_86,sm_89,sm_90,sm_100,sm_120,compute_120
+        fi
         export CUDNN_INSTALL_PATH=$PREFIX
         export NCCL_INSTALL_PATH=$PREFIX
         export CUDA_HOME="${BUILD_PREFIX}/targets/${NVARCH}-linux"
@@ -189,9 +208,29 @@ elif [[ "${target_platform}" == "linux-x86_64" ]]; then
   TARGET_CPU=x86_64
 fi
 
+# build.sh invokes build_common.sh repeatedly (once per Python version, and
+# twice per version). The work tree -- including .bazelrc -- persists across
+# those invocations, so restore .bazelrc to its pristine upstream state before
+# editing/appending below. Otherwise the appended config (--cxxopt, --copt,
+# --crosstool_top, ...) accumulates duplicate flags, which changes every
+# compile command string and defeats all of Bazel's action caching, forcing a
+# full ~22k-action recompile on every single invocation.
+if [[ ! -f .bazelrc.conda-orig ]]; then
+  cp .bazelrc .bazelrc.conda-orig
+else
+  cp .bazelrc.conda-orig .bazelrc
+fi
+
 # Get rid of unwanted defaults
 sed -i -e "/PROTOBUF_INCLUDE_PATH/c\ " .bazelrc
 sed -i -e "/PREFIX/c\ " .bazelrc
+# TF 2.21.0 defaults to the "pywrap" build, which produces a single mega
+# library instead of the standalone libtensorflow / libtensorflow_cc shared
+# objects that the libtensorflow and libtensorflow_cc packages ship.
+# The flag is read as bool(os.environ.get("USE_PYWRAP_RULES", False)), so the
+# repo_env entry must be removed entirely -- setting it to "False" (a non-empty
+# string) still evaluates truthy.
+sed -i -e "/USE_PYWRAP_RULES/d" .bazelrc
 # Ensure .bazelrc ends in a newline
 echo "" >> .bazelrc
 
@@ -229,8 +268,8 @@ export TF_CONFIGURE_IOS=0
 
 ./configure
 
-# Remove legacy flags set by configure that conflicts with CUDA 12's multi-directory approach.
-if [[ "${cuda_compiler_version}" == 12* ]]; then
+# Remove legacy flags set by configure that conflicts with CUDA 12+'s multi-directory approach.
+if [[ "${cuda_compiler_version}" == 12* || "${cuda_compiler_version}" == 13* ]]; then
     sed -i '/CUDA_TOOLKIT_PATH/d' .tf_configure.bazelrc
 fi
 
@@ -239,7 +278,18 @@ if [[ "${build_platform}" == linux-* ]]; then
 fi
 
 cat >> .bazelrc <<EOF
+# TF 2.21.0 defaults to a hermetic LLVM CC toolchain (rules_ml_toolchain);
+# the clang_local config disables it so the conda-forge compiler toolchain
+# (gen-bazel-toolchain / --crosstool_top below) and system headers are used.
+build --config=clang_local
 build --crosstool_top=//bazel_toolchain:toolchain
+# conda-forge's libabseil/libprotobuf/... use the GCC-compatible (pre-clang-18)
+# Itanium mangling for non-type template parameters of dependent type. clang 18
+# changed that mangling, so TF references e.g. absl::Cord's enable_if-constrained
+# constructor under a name the conda libraries do not export. Pin clang to the
+# GCC-compatible ABI everywhere (target and exec/host config) so symbols match.
+build --cxxopt=-fclang-abi-compat=17
+build --host_cxxopt=-fclang-abi-compat=17
 build --@local_config_cuda//cuda:override_include_cuda_libs=true
 build --logging=6
 build --verbose_failures
@@ -247,6 +297,12 @@ build --define=PREFIX=${PREFIX}
 build --define=PROTOBUF_INCLUDE_PATH=${PREFIX}/include
 build --cpu=${TARGET_CPU}
 build --local_cpu_resources=${CPU_COUNT}
+# Persistent on-disk action cache. Survives the rattler-build output tree being
+# wiped, so the four per-Python passes here -- and subsequent builds of other
+# variants (e.g. CUDA) on the same machine -- reuse already-compiled artifacts
+# instead of recompiling from scratch. Content-addressed, so always safe; on a
+# fresh CI container /tmp is empty and this is simply a no-op.
+build --disk_cache=/tmp/tf-bazel-disk-cache
 EOF
 
 # Update TF lite schema with latest flatbuffers version
@@ -261,9 +317,10 @@ sed -ie "s;BUILD_PREFIX;${BUILD_PREFIX};g" tensorflow/tools/pip_package/build_pi
 # build using bazel
 bazel ${BAZEL_OPTS} build ${BUILD_TARGET}
 
-# copy the whl file
+# copy the whl file. Bazel marks its outputs read-only, so a plain cp of an
+# already-copied wheel fails; -f removes the stale destination and retries.
 mkdir -p $SRC_DIR/tensorflow_pkg
-cp bazel-bin/tensorflow/tools/pip_package/wheel_house/tensorflow*-cp${PY_VER/./}-*.whl $SRC_DIR/tensorflow_pkg/ || true
+cp -f bazel-bin/tensorflow/tools/pip_package/wheel_house/tensorflow*-cp${PY_VER/./}-*.whl $SRC_DIR/tensorflow_pkg/ || true
 
 if [[ ! -f "${SRC_DIR}/libtensorflow_built" ]]; then
   # Build libtensorflow(_cc)
@@ -287,8 +344,9 @@ if [[ ! -f "${SRC_DIR}/libtensorflow_built" ]]; then
   rsync -r --chmod=D777,F666 --include '*/' --include '*' --exclude '*.cc' third_party/ ${PREFIX}/include/tensorflow/third_party/
   rsync -r --chmod=D777,F666 --include '*/' --include '*' --exclude '*.txt' bazel-work/external/eigen_archive/Eigen/ ${PREFIX}/include/tensorflow/third_party/Eigen/
   rsync -r --chmod=D777,F666 --include '*/' --include '*' --exclude '*.txt' bazel-work/external/eigen_archive/unsupported/ ${PREFIX}/include/tensorflow/third_party/unsupported/
-  # Flatten XLA headers from nested external path to top-level include/xla/
-  rsync -av "${PREFIX}/include/external/local_xla/xla/" "${PREFIX}/include/xla/"
+  # Flatten XLA headers from nested external path to top-level include/xla/.
+  # TF 2.21.0 renamed the XLA bazel repo @local_xla -> @xla.
+  rsync -av "${PREFIX}/include/external/xla/xla/" "${PREFIX}/include/xla/"
   touch "${SRC_DIR}/libtensorflow_built"
 fi
 

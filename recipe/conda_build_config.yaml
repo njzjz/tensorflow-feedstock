@@ -1,10 +1,15 @@
-# aarch has issues with newer GCC
-c_compiler_version:             # [aarch64]
-  - 11                          # [aarch64]
-  - 11                          # [aarch64]
-cxx_compiler_version:           # [aarch64]
-  - 11                          # [aarch64]
-  - 11                          # [aarch64]
+# TF 2.21.0 / XLA require clang for part of the build (xla/codegen/intrinsic
+# cc_to_llvm_ir emits LLVM bitcode via -emit-llvm). Build the feedstock with
+# conda-forge clang on linux, matching TensorFlow upstream which builds with
+# clang. clangxx_linux-64 still targets libstdc++ so the conda ABI is unchanged.
+c_compiler:                     # [linux]
+  - clang                       # [linux]
+cxx_compiler:                   # [linux]
+  - clangxx                     # [linux]
+c_compiler_version:             # [linux]
+  - 18                          # [linux]
+cxx_compiler_version:           # [linux]
+  - 18                          # [linux]
 
 github_actions_labels:          # [unix]
 - namespace-profile-16cpu-on-linux-64       # [linux64]
