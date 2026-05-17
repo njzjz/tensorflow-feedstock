@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Thu, 15 May 2026 00:00:00 -0400
+Subject: [PATCH] Declare tsl concurrency executor on core lib/framework
+
+TF 2.21.0's tsl platform threadpool.h (and op_kernel.h) include
+xla/tsl/concurrency/executor.h, but the //tensorflow/core hub targets
+lib, lib_internal and framework did not declare it -- Bazel rejects
+consumers with 'undeclared inclusion'. Add the dep to those targets.
+---
+diff --git a/tensorflow/core/BUILD b/tensorflow/core/BUILD
+index ecffeb5d..fbb518be 100644
+--- a/tensorflow/core/BUILD
++++ b/tensorflow/core/BUILD
+@@ -297,6 +297,9 @@ cc_library(
+     visibility = ["//visibility:public"],
+     deps = [
+         ":lib_internal",
++        # tsl platform threadpool.h (exposed via lib_hdrs) includes
++        # xla/tsl/concurrency/executor.h; declare it for the inclusion check.
++        "@xla//xla/tsl/concurrency:executor",
+         "@com_google_absl//absl/container:inlined_vector",
+         "@com_google_absl//absl/functional:any_invocable",
+         "@com_google_absl//absl/status:statusor",
+@@ -446,6 +449,8 @@ tf_cuda_library(
+     visibility = ["//visibility:public"],
+     deps = [
+         ":framework_internal",
++        # op_kernel.h / threadpool.h include xla/tsl/concurrency/executor.h
++        "@xla//xla/tsl/concurrency:executor",
+         "@com_google_absl//absl/base",
+         "@com_google_absl//absl/functional:any_invocable",
+     ],
+@@ -1278,6 +1283,8 @@ cc_library(
+     visibility = ["//visibility:public"],
+     deps = tf_additional_lib_deps() + [
+         "//tensorflow/core/platform/default/build_config:platformlib",
++        # tsl platform threadpool.h includes xla/tsl/concurrency/executor.h
++        "@xla//xla/tsl/concurrency:executor",
+         "@com_google_absl//absl/base:core_headers",
+         "@com_google_absl//absl/meta:type_traits",
+         "@com_google_absl//absl/status",

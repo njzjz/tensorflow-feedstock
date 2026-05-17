@@ -1,8 +1,8 @@
 schema_version: 1
 
 context:
-  version: "2.19.1"
-  build: 5
+  version: "2.21.0"
+  build: 0
   # Quite often libml_dtypes-headers and ml_dtypes diverge.
   # https://github.com/tensorflow/tensorflow/blob/v2.18.0/third_party/py/ml_dtypes/workspace.bzl
   libml_dtypes_version: "0.5.1"
@@ -15,21 +15,24 @@ recipe:
 
 source:
   - url: https://github.com/tensorflow/tensorflow/archive/refs/tags/v${{ version | replace(".rc", "-rc") }}.tar.gz
-    sha256: fcfb3e88ab3eebdbab98a03c869a4d2616d52ea166c8d8021de1ef921b47be8d
+    sha256: ef3568bb4865d6c1b2564fb5689c19b6b9a5311572cd1f2ff9198636a8520921
     patches:
       - patches/0001-loosen-requirements.patch
       - patches/0002-Add-additional-absl_synchronization-linkage-to-gRPC.patch
+      # TF 2.21.0 dropped the system_build_file/system_link_files wiring for
+      # protobuf and grpc, and moved proto/grpc bazel rules to //bazel:; restore
+      - patches/0052-Restore-system-protobuf-grpc-wiring.patch
+      # cc_proto_library shim must use the modern native rule (vendored deps
+      # such as riegeli call it with the deps=[proto_library] convention)
+      - patches/0066-Modern-cc_proto_library-shim.patch
       - patches/0003-Fix-missing-abseil-linkages.patch
-      - patches/0004-Fix-protobuf_python-for-systemlibs.patch
       - patches/0005-Add-absl_log-systemlib.patch
-      - patches/0006-Omit-linking-to-layout_proto_cc-if-protobuf-linkage-.patch
       - patches/0007-Fix-further-abseil-linkage.patch
       - patches/0008-Add-constraint-to-pybind11-systemlib.patch
       - patches/0009-Different-file-ending-for-flatbuffers-LICENSE.patch
       - patches/0010-Use-correct-hermetic-python.patch
       - patches/0011-Add-well_known_types_py_pb2-to-protobuf-systemlib.patch
       - patches/0012-Add-protobuf-toolchain.patch
-      - patches/0013-fix-genproto.patch
       - if: cuda_compiler_version != "None" and cuda_compiler_version[:2] == "11"
         then:
           - patches/0014-Remove-some-usage-of-absl-str_format-in-CUDA.patch
@@ -45,32 +48,20 @@ source:
       - patches/0024-work-around-for-warning-that-clang-falsely-treats-as.patch
       - patches/0025-Hardcode-BUILD_PREFIX-in-build_pip_package.patch
       - patches/0026-Only-link-to-sparse_core_layout_proto_cc-headers.patch
-      - patches/0027-Protobuf-5-compatability.patch
       # https://github.com/tensorflow/tensorflow/pull/86413
       - patches/0028-Avoid-linking-with-internal-nvrtc.patch
       - patches/0029-remove-dependencies-to-libcuda.patch
-      # adjust patch 0004 for newer absl -- hmaarrfk - 2025/07/06
       - patches/0030-Fixup-pybind11_protobuf.patch
       - patches/0031-Update-linkages-for-new-absl-organization.patch
-      # Already included in the release after 2.19.0
-      - patches/0032-Remove-ambiguous-inherited-constructor-in-default_qu.patch
-      # these came from https://git.yoctoproject.org/meta-tensorflow/tree/recipes-framework/tensorflow/files
-      # check every release there for patches in the future
-      # - patches/0033-third_party-ducc-fix-ambiguous-failure.patch
-      # - patches/0034-third_party-tf_runtime-fix-compile-failure.patch
-      # - patches/0035-support-to-build-with-gcc-15.patch
       - patches/0036-third_party-eigen_archive-workaround-ice-failure-whi.patch
       # for our system absl
       - patches/0037-add-absl_tracing_internal.patch
       # for the megabuild
       - patches/0038-Fix-building-different-python-wheels-from-one-python.patch
       - patches/0039-Fix-matmul-unused-result-error.patch
-      - patches/0040-Support-cuda-12.8.patch
       - patches/0041-Disable-profiler.patch
       - if: aarch64 and target_platform != build_platform
         then: patches/0042-cross-arch-config.patch
-      # backport https://github.com/openxla/xla/pull/22572 into vendored xla
-      - patches/0044-PR-22572-Fix-build-break-in-convolution_thunk_intern.patch
       - if: aarch64 and target_platform != build_platform
         then: patches/0045-Force-python-wheel-architecture-to-aarch64.patch
       # missing <string> include with newer libabseil (20260107+)
@@ -80,10 +71,30 @@ source:
       - patches/0047-Add-patch_cmds-to-tf_http_archive-and-fix-re2-cstrin.patch
       # absl_low_level_hash merged into absl_hash in libabseil 20260107
       - patches/0048-Remove-absl_low_level_hash-merged-into-absl_hash-in-.patch
-      # absl::Nonnull (nullability) missing from TSL system absl base BUILD
-      - patches/0049-add-absl_nullability-to-tsl-system-absl-base-BUILD.patch
+      # TF 2.21.0 dropped the system_build_file/system_link_files wiring for
+      # abseil; restore it so the conda-forge system libabseil is used
+      - patches/0050-Restore-system-abseil-wiring-in-workspace.patch
       - patches/0051-Add-nullability-dep-to-absl-base-system-BUILD.patch
-      - patches/0053-Add-missing-string-include-in-nvtx_utils.patch
+      # TF 2.21.0 removed the combined libtensorflow.tar.gz lib_package target
+      - patches/0054-Restore-combined-libtensorflow-lib_package-target.patch
+      # TF 2.21.0/XLA reference more absl/log targets than the systemlib declares
+      - patches/0055-Complete-absl-log-targets-in-system-BUILD.patch
+      # well-known-type _cc_proto targets (wrappers_cc_proto, ...) for systemlib
+      - patches/0056-Add-wkt-cc_proto-targets-to-protobuf-systemlib.patch
+      - patches/0057-Add-missing-absl-base-container-functional-hash-status.patch
+      - patches/0058-Add-absl-strings-charset-to-system-BUILD.patch
+      # TFRT headers need an explicit <cstdint> include under clang
+      - patches/0059-Add-cstdint-to-TFRT-headers-for-clang.patch
+      # vendored grpc glob.cc needs <algorithm> under clang
+      - patches/0060-Add-algorithm-include-to-grpc-glob.patch
+      # custom-op header set must declare xla/tsl/concurrency/executor.h
+      - patches/0061-Declare-tsl-concurrency-executor-for-custom-ops.patch
+      # core lib/framework hub targets must declare the same
+      - patches/0062-Declare-tsl-executor-on-core-lib-framework.patch
+      # tf_proto_library must use the srcs-based system protobuf macros
+      - patches/0063-Make-tf_proto_library-use-system-protobuf-convention.patch
+      - patches/0064-Handle-empty-output-proto_gen-in-protobuf-systemlib.patch
+      - patches/0065-Add-protobuf-util-targets-to-systemlib.patch
 
 build:
   number: ${{ build + (200 if cuda_compiler_version != "None" else 0) + 25 * ((microarch_level | default("1") | int) - 1) }}
@@ -131,7 +142,7 @@ outputs:
           then: ${{ compiler("cuda") }}
         - if: linux and x86_64
           then: x86_64-microarch-level ==${{ microarch_level | default("1") }}
-        - bazel 6.*
+        - bazel 7.*
         - bazel-toolchain
         - if: osx
           then: bazel-toolchain <0.3
@@ -150,7 +161,7 @@ outputs:
             - cudnn
             - nccl
             - cuda-version ${{ cuda_compiler_version }}.*
-        - if: cuda_compiler_version != "None" and cuda_compiler_version[:2] == "12"
+        - if: cuda_compiler_version != "None" and cuda_compiler_version[:2] in ["12", "13"]
           then:
             - cuda-cupti-dev
             - cuda-cudart-dev
@@ -368,7 +379,7 @@ outputs:
         - h5py >=3.11
         - ml_dtypes >=${{ ml_dtypes_version }},<1.0
         - opt_einsum >=2.3.2
-        - protobuf >=5.26
+        - protobuf >=6.31.1
         - python-flatbuffers >=24.3.25
         - requests >=2.21.0,<3
         - six >=1.12
@@ -376,13 +387,13 @@ outputs:
         - typing_extensions >=3.6.6
         - wrapt >=1.11.0
         # TF-API needs to move in sync
-        - tensorboard >=2.19,<2.20
-        - keras >=3.5
+        - tensorboard >=2.21,<2.22
+        - keras >=3.12.0
         # avoid that people without GPUs needlessly download ~0.5-1GB
         - if: cuda_compiler_version != "None"
           then: __cuda
         # https://github.com/conda-forge/tensorflow-feedstock/issues/296#issuecomment-1835781851
-        - if: cuda_compiler_version != "None" and cuda_compiler_version[:2] == "12"
+        - if: cuda_compiler_version != "None" and cuda_compiler_version[:2] in ["12", "13"]
           then: cuda-nvcc-tools
         - ${{ pin_subpackage("libtensorflow_framework", exact=True) }}
         - ${{ pin_subpackage("libtensorflow_cc", exact=True) }}

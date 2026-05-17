@@ -1,19 +1,17 @@
-From 33f3d835747dcb83b9d63d6ae11327d5f67c947c Mon Sep 17 00:00:00 2001
+From 79b90aef6fb4113dae65d8144d44e522300264f6 Mon Sep 17 00:00:00 2001
 From: Mark Harfouche <mark.harfouche@gmail.com>
 Date: Sun, 6 Jul 2025 17:32:42 -0400
-Subject: [PATCH 31/44] Update linkages for new absl organization
+Subject: [PATCH] Update linkages for new absl organization
 
 ---
- third_party/absl/system.absl.random.BUILD                       | 1 -
- third_party/absl/system.absl.types.BUILD                        | 2 --
- .../third_party/tsl/third_party/absl/system.absl.random.BUILD   | 1 -
- .../third_party/tsl/third_party/absl/system.absl.types.BUILD    | 2 --
- 4 files changed, 6 deletions(-)
+ third_party/xla/third_party/absl/system.absl.random.BUILD | 1 -
+ third_party/xla/third_party/absl/system.absl.types.BUILD  | 2 --
+ 2 files changed, 3 deletions(-)
 
-diff --git a/third_party/absl/system.absl.random.BUILD b/third_party/absl/system.absl.random.BUILD
-index ac17ce6343b..71aaa9a1cd5 100644
---- a/third_party/absl/system.absl.random.BUILD
-+++ b/third_party/absl/system.absl.random.BUILD
+diff --git a/third_party/xla/third_party/absl/system.absl.random.BUILD b/third_party/xla/third_party/absl/system.absl.random.BUILD
+index ac17ce63..71aaa9a1 100644
+--- a/third_party/xla/third_party/absl/system.absl.random.BUILD
++++ b/third_party/xla/third_party/absl/system.absl.random.BUILD
 @@ -30,7 +30,6 @@ cc_library(
      name = "seed_sequences",
      linkopts = [
@@ -22,10 +20,10 @@ index ac17ce6343b..71aaa9a1cd5 100644
          "-labsl_random_internal_randen",
          "-labsl_random_internal_randen_hwaes",
          "-labsl_random_internal_randen_hwaes_impl",
-diff --git a/third_party/absl/system.absl.types.BUILD b/third_party/absl/system.absl.types.BUILD
-index db94fc99185..623c0e96126 100644
---- a/third_party/absl/system.absl.types.BUILD
-+++ b/third_party/absl/system.absl.types.BUILD
+diff --git a/third_party/xla/third_party/absl/system.absl.types.BUILD b/third_party/xla/third_party/absl/system.absl.types.BUILD
+index db94fc99..623c0e96 100644
+--- a/third_party/xla/third_party/absl/system.absl.types.BUILD
++++ b/third_party/xla/third_party/absl/system.absl.types.BUILD
 @@ -30,7 +30,6 @@ cc_library(
  
  cc_library(
@@ -42,35 +40,6 @@ index db94fc99185..623c0e96126 100644
      deps = [
          "//absl/base:raw_logging_internal",
      ],
-diff --git a/third_party/xla/third_party/tsl/third_party/absl/system.absl.random.BUILD b/third_party/xla/third_party/tsl/third_party/absl/system.absl.random.BUILD
-index ac17ce6343b..71aaa9a1cd5 100644
---- a/third_party/xla/third_party/tsl/third_party/absl/system.absl.random.BUILD
-+++ b/third_party/xla/third_party/tsl/third_party/absl/system.absl.random.BUILD
-@@ -30,7 +30,6 @@ cc_library(
-     name = "seed_sequences",
-     linkopts = [
-         "-labsl_random_internal_platform",
--        "-labsl_random_internal_pool_urbg",
-         "-labsl_random_internal_randen",
-         "-labsl_random_internal_randen_hwaes",
-         "-labsl_random_internal_randen_hwaes_impl",
-diff --git a/third_party/xla/third_party/tsl/third_party/absl/system.absl.types.BUILD b/third_party/xla/third_party/tsl/third_party/absl/system.absl.types.BUILD
-index db94fc99185..623c0e96126 100644
---- a/third_party/xla/third_party/tsl/third_party/absl/system.absl.types.BUILD
-+++ b/third_party/xla/third_party/tsl/third_party/absl/system.absl.types.BUILD
-@@ -30,7 +30,6 @@ cc_library(
- 
- cc_library(
-     name = "bad_optional_access",
--    linkopts = ["-labsl_bad_optional_access"],
-     deps = [
-         "//absl/base:raw_logging_internal",
-     ],
-@@ -38,7 +37,6 @@ cc_library(
- 
- cc_library(
-     name = "bad_variant_access",
--    linkopts = ["-labsl_bad_variant_access"],
-     deps = [
-         "//absl/base:raw_logging_internal",
-     ],
+-- 
+2.43.0
+
