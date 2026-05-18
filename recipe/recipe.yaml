@@ -169,6 +169,7 @@ outputs:
         - if: cuda_compiler_version != "None" and cuda_compiler_version[:2] in ["12", "13"]
           then:
             - cuda-cupti-dev
+            - cuda-cccl
             - cuda-cudart-dev
             - cuda-nvml-dev
             - cuda-nvrtc-dev

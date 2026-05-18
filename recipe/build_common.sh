@@ -184,6 +184,17 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
         export NCCL_INSTALL_PATH=$PREFIX
         export CUDA_HOME="${BUILD_PREFIX}/targets/${NVARCH}-linux"
         export TF_CUDA_PATHS="${BUILD_PREFIX}/targets/${NVARCH}-linux,${PREFIX}/targets/${NVARCH}-linux"
+        # CUDA 13's cuda-cccl package ships CUB/Thrust/libcudacxx under
+        # targets/<arch>-linux/include/cccl/{cub,thrust,cuda,nv}, but TF core's
+        # gpu_prim.h does #include "cub/..." and @cuda_cccl//:headers globs
+        # include/cub/** -- a flat layout. Promote the cccl/ contents up to the
+        # flat include/ layout the glob expects, before the trees are merged.
+        for _t in "${PREFIX}" "${BUILD_PREFIX}"; do
+            _cccl="${_t}/targets/${NVARCH}-linux/include/cccl"
+            if [ -d "${_cccl}" ]; then
+                cp -rn "${_cccl}"/. "${_t}/targets/${NVARCH}-linux/include/" 2>/dev/null || true
+            fi
+        done
         # XLA can only cope with a single cuda header include directory, merge both
         rsync -a ${PREFIX}/targets/${NVARCH}-linux/include/ ${BUILD_PREFIX}/targets/${NVARCH}-linux/include/
 
