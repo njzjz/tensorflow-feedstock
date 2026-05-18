@@ -242,6 +242,17 @@ if [[ "${target_platform}" == osx-* ]]; then
   # found and the [for tool] proto compiles fail. Redirect that config at
   # the conda toolchain instead.
   sed -i 's#@local_config_apple_cc//:toolchain#//bazel_toolchain:toolchain#g' .bazelrc
+  # TF 2.21.0's cc_shared_library does not propagate the systemlib protobuf
+  # linkopt, so libtensorflow_framework.dylib is linked with no -lprotobuf.
+  # -undefined dynamic_lookup hides the resulting undefined protobuf symbols
+  # but cannot reconcile the TLS storage class of ThreadSafeArena::
+  # thread_cache_ -- ld rejects a thread-local reference to it as a regular
+  # (undefined) symbol. Force-link conda's libprotobuf for the target and
+  # exec (host) configs so thread_cache_ resolves to its TLS definition.
+  cat >> .bazelrc <<EOF
+build --linkopt=-L${PREFIX}/lib --linkopt=-lprotobuf
+build --host_linkopt=-L${PREFIX}/lib --host_linkopt=-lprotobuf
+EOF
 fi
 
 if [[ "${target_platform}" == "osx-arm64" ]]; then
