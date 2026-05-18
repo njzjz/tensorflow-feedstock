@@ -313,9 +313,10 @@ EOF
 # dependent type. clang 18 changed that mangling, so TF references e.g.
 # absl::Cord's enable_if-constrained constructor under a name the conda
 # libraries do not export. Pin clang to the GCC-compatible ABI to match.
-# Linux only: macOS builds with Apple clang, which rejects this flag value
-# (and builds against clang-compiled conda libraries, so does not need it).
-if [[ "${target_platform}" == linux-* ]]; then
+# Only when actually building with clang: macOS uses Apple clang (which
+# rejects this flag value) and the CUDA variants build with gcc (which has
+# no -fclang-abi-compat flag at all). Both would error on it.
+if [[ "${target_platform}" == linux-* && "${c_compiler}" == clang* ]]; then
   cat >> .bazelrc <<EOF
 build --cxxopt=-fclang-abi-compat=17
 build --host_cxxopt=-fclang-abi-compat=17
