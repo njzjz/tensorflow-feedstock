@@ -215,6 +215,17 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
         ln -sf ${BUILD_PREFIX}/bin/nvlink ${BUILD_PREFIX}/targets/${NVARCH}-linux/bin/nvlink
         ln -sf ${BUILD_PREFIX}/bin/ptxas ${BUILD_PREFIX}/targets/${NVARCH}-linux/bin/ptxas
 
+        # Build-time host tools (e.g. tensorflow/python/framework/offset_counter)
+        # load libtensorflow_framework.so, which DT_NEEDEDs libcuda.so.1. Off-GPU
+        # only the driver stub exists, installed as libcuda.so with SONAME
+        # libcuda.so.1. The conda clang toolchain bakes ${PREFIX}/lib into every
+        # host tool's RPATH, so exposing the stub there under its soname lets the
+        # loader resolve it without re-keying any Bazel action (an --action_env
+        # change would invalidate the whole action cache). build.sh removes this
+        # symlink after the build so it is never packaged.
+        ln -sf "${BUILD_PREFIX}/targets/${NVARCH}-linux/lib/stubs/libcuda.so" \
+               "${PREFIX}/lib/libcuda.so.1"
+
         export LOCAL_CUDA_PATH="${BUILD_PREFIX}/targets/${NVARCH}-linux"
         export LOCAL_CUDNN_PATH="${PREFIX}"
         export LOCAL_NCCL_PATH="${PREFIX}"
