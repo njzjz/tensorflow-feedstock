@@ -102,6 +102,9 @@ source:
       - patches/0068-Make-tensorflow-buildable-with-CCCL-v3.x.patch
       # NCCL 2.30 grew ncclDevComm to 240B; XLA's PackedKernelArg was 200B.
       - patches/0069-XLA-grow-PackedKernelArg-to-fit-NCCL-2.30-ncclDevComm.patch
+      # nvcc 12.9's cicc segfaults on RAFT select_k; use the (default-path-
+      # equivalent) select_k stub instead.
+      - patches/0070-XLA-use-select_k-stub-to-avoid-nvcc-12.9-cicc-crash.patch
 
 build:
   number: ${{ build + (200 if cuda_compiler_version != "None" else 0) + 25 * ((microarch_level | default("1") | int) - 1) }}
