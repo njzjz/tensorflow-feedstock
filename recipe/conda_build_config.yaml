@@ -1,15 +1,30 @@
-# TF 2.21.0 / XLA require clang for part of the build (xla/codegen/intrinsic
-# cc_to_llvm_ir emits LLVM bitcode via -emit-llvm). Build the feedstock with
-# conda-forge clang on linux, matching TensorFlow upstream which builds with
-# clang. clangxx_linux-64 still targets libstdc++ so the conda ABI is unchanged.
+# TF 2.21.0 / XLA require clang on linux (xla/codegen/intrinsic cc_to_llvm_ir
+# emits LLVM bitcode via -emit-llvm). Build the feedstock with conda-forge
+# clang, matching TensorFlow upstream. clangxx_linux-64 still targets libstdc++
+# so the conda ABI is unchanged.
+#
+# c_compiler_version / cxx_compiler_version / c_stdlib_version are in the
+# conda-forge `unix` zip_keys group; under CF_CUDA_ENABLED the cuda migrator
+# adds a second entry (the CUDA variant), so every overridden linux key must
+# carry TWO parallel entries to keep the zip group consistent (mirrors how
+# jaxlib-feedstock pins clang alongside its CUDA variants). The migrator
+# overrides element 1's *_compiler_version for the CUDA build; c_compiler
+# stays clang, so the CUDA variant builds with clang at the migrator's version.
 c_compiler:                     # [linux]
+  - clang                       # [linux]
   - clang                       # [linux]
 cxx_compiler:                   # [linux]
   - clangxx                     # [linux]
+  - clangxx                     # [linux]
 c_compiler_version:             # [linux]
+  - 18                          # [linux]
   - 18                          # [linux]
 cxx_compiler_version:           # [linux]
   - 18                          # [linux]
+  - 18                          # [linux]
+c_stdlib_version:               # [linux]
+  - 2.17                        # [linux]
+  - 2.17                        # [linux]
 
 github_actions_labels:          # [unix]
 - namespace-profile-16cpu-on-linux-64       # [linux64]
