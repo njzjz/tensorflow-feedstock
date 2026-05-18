@@ -130,8 +130,14 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
 	NVARCH=${ARCH}
     fi
     export LDFLAGS="${LDFLAGS} -lcusparse"
-    export GCC_HOST_COMPILER_PATH="${GCC}"
-    export GCC_HOST_COMPILER_PREFIX="$(dirname ${GCC})"
+    # The CUDA variants build with clang (see conda_build_config.yaml / the
+    # cuda migrators). TF's configure.py takes the clang-CUDA path only when
+    # TF_CUDA_CLANG=1, where it reads CLANG_CUDA_COMPILER_PATH instead of
+    # GCC_HOST_COMPILER_PATH; clang then compiles the device code directly.
+    export TF_CUDA_CLANG=1
+    export TF_NEED_CLANG=1
+    export CLANG_CUDA_COMPILER_PATH="${BUILD_PREFIX}/bin/clang"
+    export CLANG_COMPILER_PATH="${BUILD_PREFIX}/bin/clang"
 
     export TF_NEED_CUDA=1
     export TF_CUDA_VERSION="${cuda_compiler_version}"
@@ -275,8 +281,11 @@ export USE_DEFAULT_PYTHON_LIB_PATH=1
 export TF_NEED_OPENCL=0
 export TF_NEED_OPENCL_SYCL=0
 export TF_NEED_COMPUTECPP=0
-export TF_CUDA_CLANG=0
-if [[ "${target_platform}" == linux-* ]]; then
+# CUDA variants set TF_CUDA_CLANG=1 above; only force 0 for the non-CUDA build.
+if [[ "${cuda_compiler_version}" == "None" ]]; then
+  export TF_CUDA_CLANG=0
+fi
+if [[ "${target_platform}" == linux-* && "${cuda_compiler_version}" == "None" ]]; then
   export TF_NEED_CLANG=0
 fi
 export TF_NEED_TENSORRT=0
