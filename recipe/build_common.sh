@@ -383,6 +383,11 @@ build --host_action_env=CPATH=${PREFIX}/include
 build --action_env=CPLUS_INCLUDE_PATH=${PREFIX}/include
 build --host_action_env=CPLUS_INCLUDE_PATH=${PREFIX}/include
 build --linkopt=-L${PREFIX}/lib --host_linkopt=-L${PREFIX}/lib
+# TF's CUDA crosstool passes --cuda-path to every compile, including plain
+# C files; clang then errors "argument unused" under its -Werror. Tell
+# clang to ignore unused command-line arguments.
+build --copt=-Qunused-arguments
+build --host_copt=-Qunused-arguments
 EOF
   # Re-supply the force-linked systemlibs (linkopts are not path-validated).
   for _ldflag in ${LDFLAGS}; do
