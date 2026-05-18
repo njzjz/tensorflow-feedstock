@@ -95,6 +95,8 @@ source:
       - patches/0063-Make-tf_proto_library-use-system-protobuf-convention.patch
       - patches/0064-Handle-empty-output-proto_gen-in-protobuf-systemlib.patch
       - patches/0065-Add-protobuf-util-targets-to-systemlib.patch
+      # CUDA 13: the hermetic @nvidia_nvshmem redist has no cuda13 archive
+      - patches/0067-Use-the-bundled-nvshmem-stub-instead-of-the-hermetic.patch
 
 build:
   number: ${{ build + (200 if cuda_compiler_version != "None" else 0) + 25 * ((microarch_level | default("1") | int) - 1) }}
