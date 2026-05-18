@@ -283,13 +283,6 @@ cat >> .bazelrc <<EOF
 # (gen-bazel-toolchain / --crosstool_top below) and system headers are used.
 build --config=clang_local
 build --crosstool_top=//bazel_toolchain:toolchain
-# conda-forge's libabseil/libprotobuf/... use the GCC-compatible (pre-clang-18)
-# Itanium mangling for non-type template parameters of dependent type. clang 18
-# changed that mangling, so TF references e.g. absl::Cord's enable_if-constrained
-# constructor under a name the conda libraries do not export. Pin clang to the
-# GCC-compatible ABI everywhere (target and exec/host config) so symbols match.
-build --cxxopt=-fclang-abi-compat=17
-build --host_cxxopt=-fclang-abi-compat=17
 build --@local_config_cuda//cuda:override_include_cuda_libs=true
 build --logging=6
 build --verbose_failures
@@ -304,6 +297,20 @@ build --local_cpu_resources=${CPU_COUNT}
 # fresh CI container /tmp is empty and this is simply a no-op.
 build --disk_cache=/tmp/tf-bazel-disk-cache
 EOF
+
+# conda-forge's linux libabseil/libprotobuf/... use the GCC-compatible
+# (pre-clang-18) Itanium mangling for non-type template parameters of
+# dependent type. clang 18 changed that mangling, so TF references e.g.
+# absl::Cord's enable_if-constrained constructor under a name the conda
+# libraries do not export. Pin clang to the GCC-compatible ABI to match.
+# Linux only: macOS builds with Apple clang, which rejects this flag value
+# (and builds against clang-compiled conda libraries, so does not need it).
+if [[ "${target_platform}" == linux-* ]]; then
+  cat >> .bazelrc <<EOF
+build --cxxopt=-fclang-abi-compat=17
+build --host_cxxopt=-fclang-abi-compat=17
+EOF
+fi
 
 # Update TF lite schema with latest flatbuffers version
 pushd tensorflow/compiler/mlir/lite/schema
