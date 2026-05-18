@@ -234,6 +234,16 @@ sed -i -e "/USE_PYWRAP_RULES/d" .bazelrc
 # Ensure .bazelrc ends in a newline
 echo "" >> .bazelrc
 
+if [[ "${target_platform}" == osx-* ]]; then
+  # TF 2.21.0's common:apple-toolchain config forces Bazel's Apple Xcode
+  # crosstool (@local_config_apple_cc) for the target, host and apple
+  # crosstool slots. That bypasses the conda //bazel_toolchain (and its
+  # -isystem $PREFIX/include), so conda's protobuf/abseil headers are not
+  # found and the [for tool] proto compiles fail. Redirect that config at
+  # the conda toolchain instead.
+  sed -i 's#@local_config_apple_cc//:toolchain#//bazel_toolchain:toolchain#g' .bazelrc
+fi
+
 if [[ "${target_platform}" == "osx-arm64" ]]; then
   echo "build --config=macos_arm64" >> .bazelrc
   # See https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
