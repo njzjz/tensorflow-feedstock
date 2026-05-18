@@ -198,8 +198,11 @@ fi
 gen-bazel-toolchain
 
 if [[ "${target_platform}" == "osx-64" ]]; then
-  # Tensorflow doesn't cope yet with an explicit architecture (darwin_x86_64) on osx-64 yet.
-  TARGET_CPU=darwin
+  # Must match the cpu key gen-bazel-toolchain bakes into bazel_toolchain's
+  # cc_toolchain_suite (darwin_x86_64); a bare "darwin" leaves the suite
+  # lookup unresolved once TF 2.21.0's apple-toolchain points crosstool_top
+  # at it, failing analysis with "does not contain a toolchain for cpu".
+  TARGET_CPU=darwin_x86_64
   # See https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
   export CXXFLAGS="${CXXFLAGS} -D_LIBCPP_DISABLE_AVAILABILITY"
 elif [[ "${target_platform}" == "linux-aarch64" ]]; then
