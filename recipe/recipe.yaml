@@ -152,6 +152,9 @@ outputs:
         - patchelf
         - sed
         - rsync
+        # TF 2.21.0's bundled XLA has an embed_gpu_specs genrule that runs
+        # `xxd`; it is otherwise an undeclared host tool. vim provides xxd.
+        - vim
         - if: cuda_compiler_version != "None"
           then: coreutils
       host:
