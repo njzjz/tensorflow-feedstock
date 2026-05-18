@@ -242,15 +242,6 @@ if [[ "${target_platform}" == osx-* ]]; then
   # found and the [for tool] proto compiles fail. Redirect that config at
   # the conda toolchain instead.
   sed -i 's#@local_config_apple_cc//:toolchain#//bazel_toolchain:toolchain#g' .bazelrc
-  # conda-forge's osx libprotobuf is built with PROTOBUF_NO_THREADLOCAL,
-  # exporting ThreadSafeArena::thread_cache_ as a regular (non-TLS) symbol.
-  # TF must compile the protobuf headers the same way, or its objects emit
-  # thread-local relocations that the Mach-O linker rejects against the
-  # non-TLS definition in libprotobuf.dylib.
-  cat >> .bazelrc <<EOF
-build --copt=-DPROTOBUF_NO_THREADLOCAL
-build --host_copt=-DPROTOBUF_NO_THREADLOCAL
-EOF
 fi
 
 if [[ "${target_platform}" == "osx-arm64" ]]; then
