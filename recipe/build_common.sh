@@ -146,6 +146,20 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
     # nvcc / cicc / ptxas live under nvvm/bin in the conda cuda-nvcc package.
     export PATH="${PATH}:${BUILD_PREFIX}/nvvm/bin"
 
+    # XLA pulls absl btree containers into some CUDA device translation units.
+    # clang's CUDA-device frontend mis-parses absl btree.h's `friend iterator;`
+    # / `friend const_iterator;` as an elaborated-type-specifier on a type
+    # alias (clang bug llvm/llvm-project#29934). btree.h is a conda-package
+    # header, so rewrite the alias-based friends into a template friend of
+    # btree_iterator (a semantically-equivalent superset).
+    _btree_h="${PREFIX}/include/absl/container/internal/btree.h"
+    if [ -f "${_btree_h}" ]; then
+      sed -i \
+        -e 's/^  friend iterator;/  template <typename N1, typename R1, typename P1> friend class btree_iterator;/' \
+        -e '/^  friend const_iterator;/d' \
+        "${_btree_h}"
+    fi
+
     export TF_NEED_CUDA=1
     export TF_CUDA_VERSION="${cuda_compiler_version}"
     export TF_CUDNN_VERSION="${cudnn}"
