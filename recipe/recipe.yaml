@@ -171,6 +171,7 @@ outputs:
             - cuda-cupti-dev
             - cuda-cudart-dev
             - cuda-nvml-dev
+            - cuda-nvrtc-dev
             - cuda-nvtx-dev
             - libcublas-dev
             - libcusolver-dev
