@@ -1,0 +1,192 @@
+From ff3bc75719c58ead06664f7cbe3648a444274e97 Mon Sep 17 00:00:00 2001
+From: Artem Belevich <tra@google.com>
+Date: Tue, 10 Feb 2026 16:15:12 -0800
+Subject: [PATCH] Make tensorflow buildable with CCCL v3.x
+
+Reimplements the type thraits for Eigen::half and tensorflow::bfloat16 the way suggested in CCCL v3.x migration guide:
+https://github.com/NVIDIA/cccl/blob/main/docs/cccl/3.0_migration_guide.rst#cub-traits
+
+PiperOrigin-RevId: 868365592
+---
+ tensorflow/core/kernels/gpu_prim.h        | 75 +++++++++++++++++++++++
+ tensorflow/core/kernels/where_op_gpu.cu.h | 23 +++----
+ 2 files changed, 84 insertions(+), 14 deletions(-)
+
+diff --git a/tensorflow/core/kernels/gpu_prim.h b/tensorflow/core/kernels/gpu_prim.h
+index cd635812de6fc8..7f27caa9b825f2 100644
+--- a/tensorflow/core/kernels/gpu_prim.h
++++ b/tensorflow/core/kernels/gpu_prim.h
+@@ -17,6 +17,11 @@ limitations under the license, the license you must see.
+ #include "tensorflow/core/platform/bfloat16.h"
+ 
+ #if GOOGLE_CUDA
++
++// Clang can't always unroll all loops, and it's not clear yet why.
++// Silence the warning for now to avoid build breaks with -Werror.
++#pragma clang diagnostic ignored "-Wpass-failed"
++
+ #include "cub/block/block_load.cuh"
+ #include "cub/block/block_scan.cuh"
+ #include "cub/block/block_store.cuh"
+@@ -27,14 +32,21 @@ limitations under the license, the license you must see.
+ #include "cub/device/device_segmented_radix_sort.cuh"
+ #include "cub/device/device_segmented_reduce.cuh"
+ #include "cub/device/device_select.cuh"
++#if CCCL_VERSION < 3000000
+ #include "cub/iterator/counting_input_iterator.cuh"
+ #include "cub/iterator/transform_input_iterator.cuh"
++#else
++#include "cuda/ptx"
++#include "thrust/iterator/counting_iterator.h"
++#include "thrust/iterator/transform_iterator.h"
++#endif
+ #include "cub/thread/thread_operators.cuh"
+ #include "cub/warp/warp_reduce.cuh"
+ #include "third_party/gpus/cuda/include/cusparse.h"
+ 
+ namespace gpuprim = ::cub;
+ 
++#if CCCL_VERSION < 3000000
+ // Required for sorting Eigen::half and bfloat16.
+ namespace cub {
+ 
+@@ -74,6 +86,69 @@ struct NumericTraits<tensorflow::bfloat16>
+                  /*_NULL_TYPE=*/false, /*_UnsignedBits=*/uint16_t,
+                  /*T=*/tensorflow::bfloat16> {};
+ }  // namespace cub
++#else  // CCCL 3.x+
++// todo
++template <>
++inline constexpr bool ::cuda::is_floating_point_v<Eigen::half> = true;
++template <>
++inline constexpr bool ::cuda::is_floating_point_v<tensorflow::bfloat16> = true;
++
++template <>
++class ::cuda::std::numeric_limits<Eigen::half> {
++ public:
++  static constexpr bool is_specialized = true;
++  static __host__ __device__ Eigen::half max() {
++    return std::numeric_limits<Eigen::half>::max();
++  }
++  static __host__ __device__ Eigen::half min() {
++    return std::numeric_limits<Eigen::half>::min();
++  }
++  static __host__ __device__ Eigen::half lowest() {
++    return std::numeric_limits<Eigen::half>::lowest();
++  }
++};
++template <>
++struct CUB_NS_QUALIFIER::NumericTraits<Eigen::half>
++    : BaseTraits<FLOATING_POINT, true, uint16_t, Eigen::half> {};
++
++template <>
++class ::cuda::std::numeric_limits<tensorflow::bfloat16> {
++ public:
++  static constexpr bool is_specialized = true;
++  static __host__ __device__ tensorflow::bfloat16 max() {
++    return std::numeric_limits<tensorflow::bfloat16>::max();
++  }
++  static __host__ __device__ tensorflow::bfloat16 min() {
++    return std::numeric_limits<tensorflow::bfloat16>::min();
++  }
++  static __host__ __device__ tensorflow::bfloat16 lowest() {
++    return std::numeric_limits<tensorflow::bfloat16>::lowest();
++  }
++};
++template <>
++struct CUB_NS_QUALIFIER::NumericTraits<tensorflow::bfloat16>
++    : BaseTraits<FLOATING_POINT, true, uint16_t, tensorflow::bfloat16> {};
++
++namespace cub {
++template <typename ValueType, typename OffsetT = ptrdiff_t>
++using CountingInputIterator =
++    thrust::counting_iterator<ValueType, thrust::use_default,
++                              thrust::use_default, OffsetT>;
++template <typename ValueType, typename ConversionOp, typename InputIteratorT,
++          typename OffsetT = ptrdiff_t>
++using TransformInputIterator =
++    thrust::transform_iterator<ConversionOp, InputIteratorT, ValueType>;
++
++using Sum = ::cuda::std::plus<>;
++using Max = ::cuda::maximum<>;
++using Min = ::cuda::minimum<>;
++
++_CCCL_DEVICE _CCCL_FORCEINLINE unsigned int LaneId() {
++  return cuda::ptx::get_sreg_laneid();
++}
++
++}  // namespace cub
++#endif
+ #elif TENSORFLOW_USE_ROCM
+ #include "rocm/include/hipcub/hipcub.hpp"
+ #include "rocm/rocm_config.h"
+diff --git a/tensorflow/core/kernels/where_op_gpu.cu.h b/tensorflow/core/kernels/where_op_gpu.cu.h
+index 318ca801f3ccf3..ad685a457e770e 100644
+--- a/tensorflow/core/kernels/where_op_gpu.cu.h
++++ b/tensorflow/core/kernels/where_op_gpu.cu.h
+@@ -68,14 +68,13 @@ template <typename T, typename TIndex>
+ struct CubDeviceReduceCount {
+   gpuError_t operator()(void* d_temp_storage, size_t& temp_storage_bytes,
+                         const T* d_in, TIndex* d_out, int num_items,
+-                        gpuStream_t stream = 0,
+-                        bool debug_synchronous = false) {
++                        gpuStream_t stream = 0) {
+     IsNonzero<T> is_nonzero;
+     gpuprim::TransformInputIterator<bool, IsNonzero<T>, const T*>
+         is_nonzero_iter(d_in, is_nonzero);
+     return gpuprim::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes,
+-                                      is_nonzero_iter, d_out, num_items, stream,
+-                                      debug_synchronous);
++                                      is_nonzero_iter, d_out, num_items,
++                                      stream);
+   }
+ };
+ 
+@@ -83,11 +82,9 @@ template <typename TIndex>
+ struct CubDeviceReduceCount<bool, TIndex> {
+   gpuError_t operator()(void* d_temp_storage, size_t& temp_storage_bytes,
+                         const bool* d_in, TIndex* d_out, int num_items,
+-                        gpuStream_t stream = 0,
+-                        bool debug_synchronous = false) {
++                        gpuStream_t stream = 0) {
+     return gpuprim::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_in,
+-                                      d_out, num_items, stream,
+-                                      debug_synchronous);
++                                      d_out, num_items, stream);
+   }
+ };
+ 
+@@ -101,8 +98,7 @@ struct CubDeviceSelectFlaggedCounter<T, TIndex, OutputIterator,
+   gpuError_t operator()(void* d_temp_storage, size_t& temp_storage_bytes,
+                         const T* d_flags, OutputIterator d_out,
+                         TIndex* d_num_selected_out, int num_items,
+-                        gpuStream_t stream = 0,
+-                        bool debug_synchronous = false) {
++                        gpuStream_t stream = 0) {
+     gpuprim::CountingInputIterator<TIndex> select_counter(0);
+     IsNonzero<T> is_nonzero;
+     gpuprim::TransformInputIterator<bool, IsNonzero<T>, const T*>
+@@ -110,7 +106,7 @@ struct CubDeviceSelectFlaggedCounter<T, TIndex, OutputIterator,
+     return gpuprim::DeviceSelect::Flagged(
+         d_temp_storage, temp_storage_bytes, select_counter /*d_in*/,
+         is_nonzero_iter /*d_flags*/, d_out, d_num_selected_out, num_items,
+-        stream, debug_synchronous);
++        stream);
+   }
+ };
+ 
+@@ -120,12 +116,11 @@ struct CubDeviceSelectFlaggedCounter<T, TIndex, OutputIterator,
+   gpuError_t operator()(void* d_temp_storage, size_t& temp_storage_bytes,
+                         const T* d_flags, OutputIterator d_out,
+                         TIndex* d_num_selected_out, int num_items,
+-                        gpuStream_t stream = 0,
+-                        bool debug_synchronous = false) {
++                        gpuStream_t stream = 0) {
+     gpuprim::CountingInputIterator<TIndex> select_counter(0);
+     return gpuprim::DeviceSelect::Flagged(
+         d_temp_storage, temp_storage_bytes, select_counter /*d_in*/, d_flags,
+-        d_out, d_num_selected_out, num_items, stream, debug_synchronous);
++        d_out, d_num_selected_out, num_items, stream);
+   }
+ };
+ 
