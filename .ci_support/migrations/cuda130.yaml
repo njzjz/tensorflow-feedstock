@@ -53,13 +53,14 @@ cuda_compiler_version:         # [((linux and (x86_64 or aarch64)) or win64) and
 c_stdlib_version:              # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
   - 2.28                       # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
 
-# Compiler pinnings deviate from global migrator in order to honor pinnings in local conda_build_config for aarch64
+# Compiler pinnings deviate from the global migrator to honor the local
+# conda_build_config: tensorflow-feedstock builds with clang (TF/XLA require
+# it), so pin clang 18 for the CUDA variant rather than the migrator's gcc-era
+# version. Same approach as jaxlib-feedstock (use_local migrator edit).
 c_compiler_version:            # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
-  - 14                         # [(linux and (x86_64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
-  - 13                         # [(linux and (aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
+  - 18                         # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
 cxx_compiler_version:          # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
-  - 14                         # [(linux and (x86_64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
-  - 13                         # [(linux and (aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
+  - 18                         # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
 
 fortran_compiler_version:      # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
-  - 14                         # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
+  - 18                         # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
