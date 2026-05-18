@@ -130,14 +130,21 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
 	NVARCH=${ARCH}
     fi
     export LDFLAGS="${LDFLAGS} -lcusparse"
-    # The CUDA variants build with clang (see conda_build_config.yaml / the
-    # cuda migrators). TF's configure.py takes the clang-CUDA path only when
-    # TF_CUDA_CLANG=1, where it reads CLANG_CUDA_COMPILER_PATH instead of
-    # GCC_HOST_COMPILER_PATH; clang then compiles the device code directly.
-    export TF_CUDA_CLANG=1
+    # CUDA device code is compiled by nvcc with clang 18 as the host compiler
+    # (TF_NVCC_CLANG). clang 18 itself cannot compile CUDA 13 device code --
+    # CUDA 13 removed headers like texture_fetch_functions.h and clang only
+    # gained CUDA 13 support in v21 -- so nvcc must handle the .cu files.
+    # configure.py reads GCC_HOST_COMPILER_PATH on the TF_CUDA_CLANG=0 path;
+    # point it at clang (it only checks the path exists), which is exactly
+    # the host compiler nvcc uses under TF_NVCC_CLANG.
+    export TF_CUDA_CLANG=0
+    export TF_NVCC_CLANG=1
     export TF_NEED_CLANG=1
     export CLANG_CUDA_COMPILER_PATH="${BUILD_PREFIX}/bin/clang"
     export CLANG_COMPILER_PATH="${BUILD_PREFIX}/bin/clang"
+    export GCC_HOST_COMPILER_PATH="${BUILD_PREFIX}/bin/clang"
+    # nvcc / cicc / ptxas live under nvvm/bin in the conda cuda-nvcc package.
+    export PATH="${PATH}:${BUILD_PREFIX}/nvvm/bin"
 
     export TF_NEED_CUDA=1
     export TF_CUDA_VERSION="${cuda_compiler_version}"
@@ -240,6 +247,9 @@ sed -i -e "/PREFIX/c\ " .bazelrc
 # repo_env entry must be removed entirely -- setting it to "False" (a non-empty
 # string) still evaluates truthy.
 sed -i -e "/USE_PYWRAP_RULES/d" .bazelrc
+# TF's .bazelrc hardcodes -fuse-ld=lld for some configs, but conda's clang
+# ships no lld; drop it so the default linker is used.
+sed -i -e "/fuse-ld=lld/d" .bazelrc
 # Ensure .bazelrc ends in a newline
 echo "" >> .bazelrc
 
@@ -343,6 +353,14 @@ if [[ "${target_platform}" == linux-* && "${c_compiler}" == clang* ]]; then
   cat >> .bazelrc <<EOF
 build --cxxopt=-fclang-abi-compat=17
 build --host_cxxopt=-fclang-abi-compat=17
+EOF
+fi
+
+# CUDA device code is compiled by nvcc (clang 18 cannot target CUDA 13);
+# clang remains the host compiler (TF_NVCC_CLANG, set by this config).
+if [[ "${cuda_compiler_version}" != "None" ]]; then
+  cat >> .bazelrc <<EOF
+build --config=cuda_nvcc
 EOF
 fi
 
