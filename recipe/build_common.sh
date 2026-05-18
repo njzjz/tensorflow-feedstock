@@ -156,11 +156,15 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
     export LDFLAGS="${LDFLAGS//-Wl,-z,now/-Wl,-z,lazy}"
 
     if [[ "${cuda_compiler_version}" == 12* || "${cuda_compiler_version}" == 13* ]]; then
+        # clang 18 (the host compiler) only understands compute capabilities
+        # up to sm_90; the Blackwell archs sm_100/sm_120 would make clang error
+        # ("unsupported CUDA gpu architecture"). Cap the list at sm_90 until a
+        # newer clang is in use.
         if [[ "${cuda_compiler_version}" == 13* ]]; then
             # CUDA 13 dropped support for compute capabilities below sm_75
-            export HERMETIC_CUDA_COMPUTE_CAPABILITIES=sm_75,sm_80,sm_86,sm_89,sm_90,sm_100,sm_120,compute_120
+            export HERMETIC_CUDA_COMPUTE_CAPABILITIES=sm_75,sm_80,sm_86,sm_89,sm_90,compute_90
         else
-            export HERMETIC_CUDA_COMPUTE_CAPABILITIES=sm_60,sm_70,sm_75,sm_80,sm_86,sm_89,sm_90,sm_100,sm_120,compute_120
+            export HERMETIC_CUDA_COMPUTE_CAPABILITIES=sm_60,sm_70,sm_75,sm_80,sm_86,sm_89,sm_90,compute_90
         fi
         export CUDNN_INSTALL_PATH=$PREFIX
         export NCCL_INSTALL_PATH=$PREFIX
