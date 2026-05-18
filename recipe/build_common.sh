@@ -228,6 +228,15 @@ elif [[ "${target_platform}" == "linux-x86_64" ]]; then
   TARGET_CPU=x86_64
 fi
 
+# --cpu key for the crosstool's cc_toolchain_suite lookup. The conda
+# //bazel_toolchain suite is keyed by ${TARGET_CPU}; TF's CUDA crosstool
+# (@local_config_cuda//crosstool) suite is keyed k8/aarch64, so the CUDA
+# build needs k8 on linux-64.
+CC_CPU=${TARGET_CPU}
+if [[ "${cuda_compiler_version}" != "None" && "${target_platform}" == "linux-64" ]]; then
+  CC_CPU=k8
+fi
+
 # build.sh invokes build_common.sh repeatedly (once per Python version, and
 # twice per version). The work tree -- including .bazelrc -- persists across
 # those invocations, so restore .bazelrc to its pristine upstream state before
@@ -327,15 +336,14 @@ fi
 cat >> .bazelrc <<EOF
 # TF 2.21.0 defaults to a hermetic LLVM CC toolchain (rules_ml_toolchain);
 # the clang_local config disables it so the conda-forge compiler toolchain
-# (gen-bazel-toolchain / --crosstool_top below) and system headers are used.
+# and system headers are used (--crosstool_top is set per-variant below).
 build --config=clang_local
-build --crosstool_top=//bazel_toolchain:toolchain
 build --@local_config_cuda//cuda:override_include_cuda_libs=true
 build --logging=6
 build --verbose_failures
 build --define=PREFIX=${PREFIX}
 build --define=PROTOBUF_INCLUDE_PATH=${PREFIX}/include
-build --cpu=${TARGET_CPU}
+build --cpu=${CC_CPU}
 build --local_cpu_resources=${CPU_COUNT}
 # Persistent on-disk action cache. Survives the rattler-build output tree being
 # wiped, so the four per-Python passes here -- and subsequent builds of other
@@ -344,6 +352,25 @@ build --local_cpu_resources=${CPU_COUNT}
 # fresh CI container /tmp is empty and this is simply a no-op.
 build --disk_cache=/tmp/tf-bazel-disk-cache
 EOF
+
+# Per-variant crosstool. The CPU build uses the conda gen-bazel-toolchain
+# crosstool directly. The CUDA build must route through TF's CUDA crosstool
+# instead: its host_compiler is the nvcc wrapper
+# (crosstool_wrapper_driver_is_not_gcc), which dispatches per action -- '-x
+# cuda' device files (.cu.cc from cuda_library) go to nvcc 13, everything
+# else to conda clang 18 (CLANG_CUDA_COMPILER_PATH). A blanket
+# --crosstool_top=//bazel_toolchain would force plain clang onto the device
+# files and fail on the nvcc-only copts. Mirrors TF's own config:rocm.
+if [[ "${cuda_compiler_version}" == "None" ]]; then
+  cat >> .bazelrc <<EOF
+build --crosstool_top=//bazel_toolchain:toolchain
+EOF
+else
+  cat >> .bazelrc <<EOF
+build --crosstool_top=@local_config_cuda//crosstool:toolchain
+build --host_crosstool_top=@local_config_cuda//crosstool:toolchain
+EOF
+fi
 
 # conda-forge's linux libabseil/libprotobuf/... use the GCC-compatible
 # (pre-clang-18) Itanium mangling for non-type template parameters of
