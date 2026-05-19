@@ -91,7 +91,8 @@ source:
       - patches/0061-Declare-tsl-concurrency-executor-for-custom-ops.patch
       # core lib/framework hub targets must declare the same
       - patches/0062-Declare-tsl-executor-on-core-lib-framework.patch
-      # tf_proto_library must use the srcs-based system protobuf macros
+      # tf_proto_library must call the systemlib py_proto_library with the old
+      # srcs-based convention (TF 2.21.0 uses the modern deps=[proto_library])
       - patches/0063-Make-tf_proto_library-use-system-protobuf-convention.patch
       - patches/0064-Handle-empty-output-proto_gen-in-protobuf-systemlib.patch
       - patches/0065-Add-protobuf-util-targets-to-systemlib.patch

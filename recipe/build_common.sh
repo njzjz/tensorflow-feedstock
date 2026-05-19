@@ -20,6 +20,26 @@ done
 
 cp ${RECIPE_DIR}/pybind11_protobuf/*.patch ${SRC_DIR}/third_party/pybind11_protobuf/.
 
+# hmaarrfk - 2026/05/19 - systemlib (shared) protobuf descriptor guard.
+# TF embeds the same generated proto .pb.o into many shared objects
+# (libtensorflow_framework.so, libtensorflow_cc.so, the _pywrap_*.so python
+# extensions, tflite/profiler plugin .so's). With conda's *shared*
+# libprotobuf.so there is one process-global generated-descriptor database,
+# and the second .so to load re-registers a proto file already registered by
+# the first -> protobuf aborts ("File already exists in database"). Two
+# force-included headers fix this while keeping shared protobuf:
+#   * tf_proto_descriptor_guard.h is force-included into EVERY TU. It is
+#     featherweight (no protobuf/absl headers) so it is safe even in vendored
+#     sources built with an older -std or as plain C. It just installs a macro
+#     redirecting the generated AddDescriptors() call site.
+#   * tf_proto_descriptor_guard_impl.h is force-included into the .pb.cc files
+#     only (--per_file_copt); it carries the inline guarded definition.
+# Both are installed into $PREFIX/include (a toolchain -isystem dir) so a
+# bare-name -include resolves; removed from the package at the end of
+# build_common.sh together with $PREFIX/include/python.
+cp ${RECIPE_DIR}/tf_proto_descriptor_guard.h $PREFIX/include/tf_proto_descriptor_guard.h
+cp ${RECIPE_DIR}/tf_proto_descriptor_guard_impl.h $PREFIX/include/tf_proto_descriptor_guard_impl.h
+
 sed -i.bak "s;@@PREFIX@@;$PREFIX;" third_party/pybind11_protobuf/0002-Add-Python-include-path.patch
 
 # In abseil-cpp 20260107, the template aliases absl::Nonnull<T>, absl::Nullable<T>,
@@ -289,13 +309,11 @@ fi
 # Get rid of unwanted defaults
 sed -i -e "/PROTOBUF_INCLUDE_PATH/c\ " .bazelrc
 sed -i -e "/PREFIX/c\ " .bazelrc
-# TF 2.21.0 defaults to the "pywrap" build, which produces a single mega
-# library instead of the standalone libtensorflow / libtensorflow_cc shared
-# objects that the libtensorflow and libtensorflow_cc packages ship.
-# The flag is read as bool(os.environ.get("USE_PYWRAP_RULES", False)), so the
-# repo_env entry must be removed entirely -- setting it to "False" (a non-empty
-# string) still evaluates truthy.
-sed -i -e "/USE_PYWRAP_RULES/d" .bazelrc
+# TF 2.21.0's pywrap build (USE_PYWRAP_RULES, kept enabled) is what keeps each
+# protobuf descriptor in a single shared object -- disabling it caused a
+# descriptor double-registration SIGABRT at `import tensorflow`. The standalone
+# libtensorflow / libtensorflow_cc C/C++ libraries are produced by a separate
+# non-pywrap Bazel pass (see below).
 # TF's .bazelrc hardcodes -fuse-ld=lld for some configs, but conda's clang
 # ships no lld; drop it so the default linker is used.
 sed -i -e "/fuse-ld=lld/d" .bazelrc
@@ -329,7 +347,12 @@ if [[ "${target_platform}" == "osx-arm64" ]]; then
   export CXXFLAGS="${CXXFLAGS} -D_LIBCPP_DISABLE_AVAILABILITY"
 fi
 export TF_ENABLE_XLA=1
-export BUILD_TARGET="//tensorflow/tools/pip_package:wheel //tensorflow/tools/lib_package:libtensorflow //tensorflow:libtensorflow_cc${SHLIB_EXT}"
+# Pass 1 builds the python wheel with the pywrap build (USE_PYWRAP_RULES on).
+# The standalone libtensorflow / libtensorflow_cc C/C++ libraries are not
+# declared as targets in the pywrap build, so they are built by a separate
+# non-pywrap Bazel pass further down (LIBTF_TARGET).
+export BUILD_TARGET="//tensorflow/tools/pip_package:wheel"
+export LIBTF_TARGET="//tensorflow/tools/lib_package:libtensorflow //tensorflow:libtensorflow_cc${SHLIB_EXT}"
 
 # Python settings
 export PYTHON_BIN_PATH=${PYTHON}
@@ -374,7 +397,6 @@ cat >> .bazelrc <<EOF
 # the clang_local config disables it so the conda-forge compiler toolchain
 # and system headers are used (--crosstool_top is set per-variant below).
 build --config=clang_local
-build --@local_config_cuda//cuda:override_include_cuda_libs=true
 build --logging=6
 build --verbose_failures
 build --define=PREFIX=${PREFIX}
@@ -387,6 +409,18 @@ build --local_cpu_resources=${CPU_COUNT}
 # instead of recompiling from scratch. Content-addressed, so always safe; on a
 # fresh CI container /tmp is empty and this is simply a no-op.
 build --disk_cache=/tmp/tf-bazel-disk-cache
+# systemlib protobuf descriptor guard (see tf_proto_descriptor_guard.h).
+# 1. The featherweight guard header is force-included into every C++ TU; it
+#    only installs the AddDescriptors() redirect macro, so it is safe even in
+#    vendored sources (XNNPACK etc.) built with an older -std.
+# 2. The heavy guard implementation header is force-included into the
+#    generated .pb.cc files only, via --per_file_copt: those TUs already
+#    include the protobuf headers and are built as C++17.
+# Applied to both the target and the exec/host configs.
+build --copt=-include --copt=tf_proto_descriptor_guard.h
+build --host_copt=-include --host_copt=tf_proto_descriptor_guard.h
+build --per_file_copt=.*\.pb\.cc\$@-include,tf_proto_descriptor_guard_impl.h
+build --host_per_file_copt=.*\.pb\.cc\$@-include,tf_proto_descriptor_guard_impl.h
 EOF
 
 # Per-variant crosstool. The CPU build uses the conda gen-bazel-toolchain
@@ -473,6 +507,15 @@ mkdir -p $SRC_DIR/tensorflow_pkg
 cp -f bazel-bin/tensorflow/tools/pip_package/wheel_house/tensorflow*-cp${PY_VER/./}-*.whl $SRC_DIR/tensorflow_pkg/ || true
 
 if [[ ! -f "${SRC_DIR}/libtensorflow_built" ]]; then
+  # Pass 2: build the standalone libtensorflow / libtensorflow_cc C/C++
+  # libraries with the NON-pywrap build (the pywrap build does not declare
+  # these targets). USE_PYWRAP_RULES is stripped from .bazelrc just for this
+  # pass; it is regenerated (pywrap on) on the next build_common.sh run.
+  # Python-independent, so this runs once (guarded by the libtensorflow_built
+  # marker created at the end of build.sh).
+  sed -i -e "/USE_PYWRAP_RULES/d" .bazelrc
+  bazel ${BAZEL_OPTS} build ${LIBTF_TARGET}
+
   # Build libtensorflow(_cc)
   mkdir -p ${PREFIX}/lib
   mkdir -p ${PREFIX}/include
@@ -502,3 +545,6 @@ fi
 
 # This was only needed for protobuf_python
 rm -rf $PREFIX/include/python
+# The systemlib protobuf descriptor guard headers are build-only; never package them.
+rm -f $PREFIX/include/tf_proto_descriptor_guard.h
+rm -f $PREFIX/include/tf_proto_descriptor_guard_impl.h
