@@ -96,6 +96,17 @@ source:
       - patches/0063-Make-tf_proto_library-use-system-protobuf-convention.patch
       - patches/0064-Handle-empty-output-proto_gen-in-protobuf-systemlib.patch
       - patches/0065-Add-protobuf-util-targets-to-systemlib.patch
+      # tsl/platform:protobuf must use the systemlib flat protobuf target
+      # (no upstream src/google/protobuf/io sub-package in systemlib)
+      - patches/0071-_protobuf_deps-use-the-systemlib-flat-protobuf-targe.patch
+      # Two TF .so's (libtensorflow_framework.so.2 from the pywrap wheel and
+      # lib/libtensorflow_cc.so.2.21.0 from the libtensorflow_cc package) each
+      # statically embed function_ops.cc and so both push _Arg onto the single
+      # OpRegistry::Global() deferred queue at process startup. The first
+      # load_op_library() (microfrontend, via `import tensorflow`) drains the
+      # queue and aborts with AlreadyExistsError. Make RegisterAlreadyLocked
+      # silently accept a duplicate when the OpDef matches the existing one.
+      - patches/0072-OpRegistry-tolerate-duplicate-registrations-with-ide.patch
       # CUDA 13: the hermetic @nvidia_nvshmem redist has no cuda13 archive
       - patches/0067-Use-the-bundled-nvshmem-stub-instead-of-the-hermetic.patch
       # CUDA 13 ships CCCL/CUB 3.x which removed APIs gpu_prim.h relies on;

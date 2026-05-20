@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Tue, 19 May 2026 00:00:00 -0400
+Subject: [PATCH] _protobuf_deps: use the systemlib flat protobuf target
+
+The systemlib protobuf BUILD (conda libprotobuf) does not declare the
+upstream src/google/protobuf/io sub-package, nor the differencer /
+json_util / type_resolver / delimited_message_util split targets. conda
+libprotobuf is one complete library; the flat :protobuf / :protobuf_lite
+targets provide all of it. Without this, @tsl//tsl/platform:protobuf fails
+analysis ("no such package @com_google_protobuf//src/google/protobuf/io").
+---
+--- a/third_party/xla/xla/tsl/platform/default/build_config.bzl
++++ b/third_party/xla/xla/tsl/platform/default/build_config.bzl
+@@ -451,15 +451,13 @@
+     ]
+ 
+ def _protobuf_deps():
+-    return [
+-        clean_dep("@com_google_protobuf//:delimited_message_util"),
+-        clean_dep("@com_google_protobuf//:differencer"),
+-        clean_dep("@com_google_protobuf//:json_util"),
+-        clean_dep("@com_google_protobuf//:type_resolver"),
++    # Systemlib protobuf (conda libprotobuf) is a single complete library; the
++    # upstream src/google/protobuf/io sub-packages and the differencer/json_util/
++    # type_resolver/delimited_message_util split targets are not declared in the
++    # systemlib protobuf.BUILD. The flat :protobuf target provides all of them.
++    return [
+         clean_dep("@com_google_protobuf//:protobuf"),
+         clean_dep("@com_google_protobuf//:protobuf_lite"),
+-        clean_dep("@com_google_protobuf//src/google/protobuf/io"),
+-        clean_dep("@com_google_protobuf//src/google/protobuf/io:tokenizer"),
+     ]
+ 
+ def tf_protobuf_deps():
+
