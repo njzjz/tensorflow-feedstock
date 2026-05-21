@@ -168,8 +168,15 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
     # xla/stream_executor/cuda/cuda_executor.cc calls NVML directly
     # (nvmlDeviceGetHandleByPciBusId_v2 etc.), so build-time tools that link
     # cuda_executor (e.g. hlo_to_kernel) fail with undefined references.
-    # Force-link the conda cuda-nvml-dev stub explicitly.
-    export LDFLAGS="${LDFLAGS} -L${BUILD_PREFIX}/targets/${NVARCH}-linux/lib/stubs -lcusparse -lnvidia-ml"
+    # Force-link the conda cuda-nvml-dev stub for binaries that actually
+    # reference NVML symbols, but wrap with `--as-needed` so the spurious
+    # DT_NEEDED libnvidia-ml.so.1 is NOT propagated into every binary by
+    # the linux branch's `--no-as-needed` above. Otherwise tiny extension
+    # modules like _pywrap_cpu_feature_guard.so end up DT_NEEDing nvml,
+    # and the conda test env (which has no nvml runtime, only the
+    # build-time stub) fails to `import tensorflow`:
+    #   ImportError: libnvidia-ml.so.1: cannot open shared object file
+    export LDFLAGS="${LDFLAGS} -L${BUILD_PREFIX}/targets/${NVARCH}-linux/lib/stubs -lcusparse -Wl,--as-needed -lnvidia-ml -Wl,--no-as-needed"
     # CUDA device code is compiled by nvcc with clang 18 as the host compiler
     # (TF_NVCC_CLANG). clang 18 itself cannot compile CUDA 13 device code --
     # CUDA 13 removed headers like texture_fetch_functions.h and clang only
