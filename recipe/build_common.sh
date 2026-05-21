@@ -149,7 +149,13 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
     else
 	NVARCH=${ARCH}
     fi
-    export LDFLAGS="${LDFLAGS} -lcusparse"
+    # cuda_wheel (--@local_config_cuda//cuda:include_cuda_libs=false) skips
+    # linking the hermetic CUDA libs, including libnvidia-ml. But XLA's
+    # xla/stream_executor/cuda/cuda_executor.cc calls NVML directly
+    # (nvmlDeviceGetHandleByPciBusId_v2 etc.), so build-time tools that link
+    # cuda_executor (e.g. hlo_to_kernel) fail with undefined references.
+    # Force-link the conda cuda-nvml-dev stub explicitly.
+    export LDFLAGS="${LDFLAGS} -L${BUILD_PREFIX}/targets/${NVARCH}-linux/lib/stubs -lcusparse -lnvidia-ml"
     # CUDA device code is compiled by nvcc with clang 18 as the host compiler
     # (TF_NVCC_CLANG). clang 18 itself cannot compile CUDA 13 device code --
     # CUDA 13 removed headers like texture_fetch_functions.h and clang only
@@ -245,6 +251,11 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
         # symlink after the build so it is never packaged.
         ln -sf "${BUILD_PREFIX}/targets/${NVARCH}-linux/lib/stubs/libcuda.so" \
                "${PREFIX}/lib/libcuda.so.1"
+        # Same treatment for libnvidia-ml: XLA's cuda_executor.cc calls NVML
+        # directly and proto_text codegen tools (gen_proto_text_functions) end
+        # up DT_NEEDEDing libnvidia-ml.so.1 even under cuda_wheel.
+        ln -sf "${BUILD_PREFIX}/targets/${NVARCH}-linux/lib/stubs/libnvidia-ml.so" \
+               "${PREFIX}/lib/libnvidia-ml.so.1"
 
         export LOCAL_CUDA_PATH="${BUILD_PREFIX}/targets/${NVARCH}-linux"
         export LOCAL_CUDNN_PATH="${PREFIX}"
@@ -486,6 +497,12 @@ fi
 if [[ "${cuda_compiler_version}" != "None" ]]; then
   cat >> .bazelrc <<EOF
 build --config=cuda_nvcc
+# cuda_wheel sets --@local_config_cuda//cuda:include_cuda_libs=false, so the
+# CUDA libraries are dlopen'd lazily at first GPU use instead of hard-NEEDED
+# via DT_NEEDED. Without it (or the deprecated override_include_cuda_libs)
+# tf_wheel.bzl bails out and libtensorflow_framework.so.2 ends up needing
+# libcuda.so.1 at import time, which the conda test envs don't ship.
+build --config=cuda_wheel
 EOF
 fi
 
