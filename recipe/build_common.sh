@@ -124,7 +124,21 @@ fi
 # Dependency graph:
 # bazel query 'deps(//tensorflow/tools/lib_package:libtensorflow)' --output graph > graph.in
 if [[ "${target_platform}" == osx-* ]]; then
-  export LDFLAGS="${LDFLAGS} -lz -framework CoreFoundation -Xlinker -undefined -Xlinker dynamic_lookup"
+  # Same root cause as the linux branch below: TF 2.21.0's cc_shared_library
+  # does not forward the systemlib cc_library linkopts, so the resulting
+  # libtensorflow_cc.dylib / _pywrap_tensorflow_internal.so have no
+  # LC_LOAD_DYLIB entries for the systemized grpc/sqlite3/icu/png/jpeg/gif/
+  # flatbuffers/abseil they reference. With `-undefined dynamic_lookup` the
+  # link succeeds silently and `import tensorflow` then fails at dlopen with
+  # e.g. `symbol not found: __ZN4grpc6Status2OKE` (grpc::Status::OK).
+  # macOS ld64 does not accept --no-as-needed/--export-dynamic, but listing
+  # -l<name> is enough to add the LC_LOAD_DYLIB entry. abseil ships ~90
+  # dylibs; enumerate them like the linux branch.
+  _absl_libs=""
+  for _f in "${PREFIX}"/lib/libabsl_*.dylib; do
+    [ -e "$_f" ] && _absl_libs="${_absl_libs} -l$(basename "$_f" .dylib | sed 's/^lib//')"
+  done
+  export LDFLAGS="${LDFLAGS} -framework CoreFoundation -Xlinker -undefined -Xlinker dynamic_lookup -lprotobuf -lgrpc -lgrpc++ -lgpr -lsqlite3 -lpng -ljpeg -lgif -lflatbuffers -licui18n -licuuc -licudata -lsnappy -lcurl -lz -lssl -lcrypto${_absl_libs}"
 else
   # TF 2.21.0's cc_shared_library does not forward the systemlib
   # cc_library linkopts, so the libtensorflow*.so end up with no DT_NEEDED
