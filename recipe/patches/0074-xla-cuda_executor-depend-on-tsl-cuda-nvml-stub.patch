@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Wed, 21 May 2026 17:00:00 -0400
+Subject: [PATCH] XLA cuda_executor: depend on //xla/tsl/cuda:nvml lazy stub
+
+xla/stream_executor/cuda/cuda_executor.cc calls NVML directly
+(nvmlDeviceGetHandleByPciBusId_v2, nvmlInit_v2, nvmlShutdown, etc.),
+but the `cuda_executor` cc_library does not depend on
+`//xla/tsl/cuda:nvml`. The `cuda_platform` sibling already does (see
+the BUILD entry next to its rule), so any binary that links *both*
+cuda_executor and cuda_platform resolves the NVML symbols through
+TSL's in-tree lazy-dlopen stub (see xla/tsl/cuda/nvml_stub.cc, which
+is aliased in under --@local_config_cuda//cuda:include_cuda_libs=false,
+i.e. --config=cuda_wheel).
+
+Mirror that dependency on cuda_executor so any binary that links
+cuda_executor alone (host-side codegen / kernel-gen tools etc.) also
+gets the stub. Without this fix, packagers that want a fully
+hermetic-CUDA wheel layout (no DT_NEEDED libnvidia-ml.so.1) have to
+inject -lnvidia-ml into LDFLAGS, which then leaks into every output
+because Bazel reorders the --as-needed/--no-as-needed brackets.
+
+Same trick `cuda_platform` already uses; resolves to `:nvml_stub`
+under cuda_wheel and is a no-op otherwise.
+---
+--- a/third_party/xla/xla/stream_executor/cuda/BUILD
++++ b/third_party/xla/xla/stream_executor/cuda/BUILD
+@@ -1338,6 +1338,7 @@ cc_library(
+         "//xla/stream_executor/gpu:tma_metadata",
+         "//xla/tsl/cuda",  # buildcleaner: keep
+         "//xla/tsl/cuda:cudart",  # buildcleaner: keep
++        "//xla/tsl/cuda:nvml",  # buildcleaner: keep -- lazy-dlopen NVML stub
+         "//xla/tsl/platform:env",
+         "//xla/tsl/platform:errors",
+         "//xla/tsl/platform:logging",

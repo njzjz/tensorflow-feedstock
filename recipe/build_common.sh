@@ -163,20 +163,21 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
     else
 	NVARCH=${ARCH}
     fi
-    # cuda_wheel (--@local_config_cuda//cuda:include_cuda_libs=false) skips
-    # linking the hermetic CUDA libs, including libnvidia-ml. But XLA's
-    # xla/stream_executor/cuda/cuda_executor.cc calls NVML directly
-    # (nvmlDeviceGetHandleByPciBusId_v2 etc.), so build-time tools that link
-    # cuda_executor (e.g. hlo_to_kernel) fail with undefined references.
-    # Force-link the conda cuda-nvml-dev stub for binaries that actually
-    # reference NVML symbols, but wrap with `--as-needed` so the spurious
-    # DT_NEEDED libnvidia-ml.so.1 is NOT propagated into every binary by
-    # the linux branch's `--no-as-needed` above. Otherwise tiny extension
-    # modules like _pywrap_cpu_feature_guard.so end up DT_NEEDing nvml,
-    # and the conda test env (which has no nvml runtime, only the
-    # build-time stub) fails to `import tensorflow`:
-    #   ImportError: libnvidia-ml.so.1: cannot open shared object file
-    export LDFLAGS="${LDFLAGS} -L${BUILD_PREFIX}/targets/${NVARCH}-linux/lib/stubs -lcusparse -Wl,--as-needed -lnvidia-ml -Wl,--no-as-needed"
+    # NB: do NOT force-link libnvidia-ml or libcusparse into LDFLAGS here.
+    # Under `--config=cuda_wheel`, XLA's in-tree lazy-dlopen stubs
+    # (third_party/xla/xla/tsl/cuda/{nvml,cusparse,cudart,cublas,...}_stub.cc)
+    # are aliased in by the `:nvml`/`:cusparse`/... targets, so the resulting
+    # .so's have no DT_NEEDED for those libs and CUDA libs are dlopen'd
+    # lazily at first GPU use (matches jaxlib's hermetic CUDA layout).
+    # Adding `-lnvidia-ml` to LDFLAGS, even bracketed with `--as-needed`,
+    # gets forwarded through the per-token `--linkopt=` loop further down
+    # this file; Bazel reorders linkopts by class, which strips the
+    # `--as-needed` scope and ends up making every output (including
+    # libtensorflow_framework.so.2.21.0 and _pywrap_cpu_feature_guard.so)
+    # unconditionally NEED libnvidia-ml.so.1 / libcusparse.so.12. NVML
+    # ships only with the NVIDIA driver (no conda-forge package), so the
+    # conda test env fails to `import tensorflow`. cusparse is in
+    # libcusparse but there is no reason to hard-need it either.
     # CUDA device code is compiled by nvcc with clang 18 as the host compiler
     # (TF_NVCC_CLANG). clang 18 itself cannot compile CUDA 13 device code --
     # CUDA 13 removed headers like texture_fetch_functions.h and clang only
@@ -272,11 +273,6 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
         # symlink after the build so it is never packaged.
         ln -sf "${BUILD_PREFIX}/targets/${NVARCH}-linux/lib/stubs/libcuda.so" \
                "${PREFIX}/lib/libcuda.so.1"
-        # Same treatment for libnvidia-ml: XLA's cuda_executor.cc calls NVML
-        # directly and proto_text codegen tools (gen_proto_text_functions) end
-        # up DT_NEEDEDing libnvidia-ml.so.1 even under cuda_wheel.
-        ln -sf "${BUILD_PREFIX}/targets/${NVARCH}-linux/lib/stubs/libnvidia-ml.so" \
-               "${PREFIX}/lib/libnvidia-ml.so.1"
 
         export LOCAL_CUDA_PATH="${BUILD_PREFIX}/targets/${NVARCH}-linux"
         export LOCAL_CUDNN_PATH="${PREFIX}"
