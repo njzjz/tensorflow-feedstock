@@ -107,6 +107,8 @@ source:
       # queue and aborts with AlreadyExistsError. Make RegisterAlreadyLocked
       # silently accept a duplicate when the OpDef matches the existing one.
       - patches/0072-OpRegistry-tolerate-duplicate-registrations-with-ide.patch
+      # TF 2.21.0 pins h5py < 3.15.0; conda-forge ships 3.16.0+. Drop upper.
+      - patches/0073-Loosen-h5py-requirement-upper-bound.patch
       # CUDA 13: the hermetic @nvidia_nvshmem redist has no cuda13 archive
       - patches/0067-Use-the-bundled-nvshmem-stub-instead-of-the-hermetic.patch
       # CUDA 13 ships CCCL/CUB 3.x which removed APIs gpu_prim.h relies on;
