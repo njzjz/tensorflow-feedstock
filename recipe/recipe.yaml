@@ -118,6 +118,11 @@ source:
       # ALREADY_EXISTS (e.g. RepeatBufferKernel) at `import tensorflow`.
       # Tolerate identical-key duplicate registrations (keep the first).
       - patches/0075-PlatformObjectRegistry-tolerate-duplicate-registrati.patch
+      # Same multi-.so issue hits systemized absl's process-global FlagRegistry:
+      # coordination_service_agent.cc's ABSL_FLAG(coordination_agent_recoverable)
+      # registers twice and aborts import. absl can't be patched to tolerate it,
+      # so read the override from TF_COORDINATION_AGENT_RECOVERABLE env var.
+      - patches/0076-Replace-coordination_agent_recoverable-ABSL_FLAG-wit.patch
       # CUDA 13: the hermetic @nvidia_nvshmem redist has no cuda13 archive
       - patches/0067-Use-the-bundled-nvshmem-stub-instead-of-the-hermetic.patch
       # CUDA 13 ships CCCL/CUB 3.x which removed APIs gpu_prim.h relies on;
