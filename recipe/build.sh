@@ -21,10 +21,6 @@ for ver in 3.10 3.11 3.12 3.13; do
 done
 bazel clean
 
-# Remove the build-only libcuda.so.1 driver stub symlink dropped into
-# ${PREFIX}/lib by build_common.sh (CUDA variants) so it is never packaged.
-rm -f "${PREFIX}/lib/libcuda.so.1"
-
 # Bazel unpacks the hermetic Python toolchains (and its own install tree)
 # read-only. That prevents rattler-build from removing build_env when it
 # moves on to package the inheriting outputs, aborting the build after only

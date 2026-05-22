@@ -263,16 +263,18 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
         ln -sf ${BUILD_PREFIX}/bin/nvlink ${BUILD_PREFIX}/targets/${NVARCH}-linux/bin/nvlink
         ln -sf ${BUILD_PREFIX}/bin/ptxas ${BUILD_PREFIX}/targets/${NVARCH}-linux/bin/ptxas
 
-        # Build-time host tools (e.g. tensorflow/python/framework/offset_counter)
-        # load libtensorflow_framework.so, which DT_NEEDEDs libcuda.so.1. Off-GPU
-        # only the driver stub exists, installed as libcuda.so with SONAME
-        # libcuda.so.1. The conda clang toolchain bakes ${PREFIX}/lib into every
-        # host tool's RPATH, so exposing the stub there under its soname lets the
-        # loader resolve it without re-keying any Bazel action (an --action_env
-        # change would invalidate the whole action cache). build.sh removes this
-        # symlink after the build so it is never packaged.
-        ln -sf "${BUILD_PREFIX}/targets/${NVARCH}-linux/lib/stubs/libcuda.so" \
-               "${PREFIX}/lib/libcuda.so.1"
+        # NB: we used to symlink the libcuda.so driver stub into ${PREFIX}/lib
+        # as libcuda.so.1 here so build-time host tools (e.g.
+        # tensorflow/python/framework/offset_counter) that load
+        # libtensorflow_framework.so could resolve its libcuda.so.1 DT_NEEDED
+        # off-GPU. That dependency predates --config=cuda_wheel: under
+        # cuda_wheel (include_cuda_libs=false, a common: flag so it applies to
+        # the exec/host config too) XLA routes the CUDA driver exclusively
+        # through its always-lazy in-tree stub (xla/tsl/cuda:cuda ->
+        # cuda_stub.cc), so libtensorflow_framework.so no longer DT_NEEDEDs
+        # libcuda.so.1 and the symlink is unnecessary. Removed; if a host tool
+        # still fails with "libcuda.so.1: cannot open", the fix is to route
+        # that tool through //xla/tsl/cuda:cuda rather than re-add the symlink.
 
         export LOCAL_CUDA_PATH="${BUILD_PREFIX}/targets/${NVARCH}-linux"
         export LOCAL_CUDNN_PATH="${PREFIX}"
