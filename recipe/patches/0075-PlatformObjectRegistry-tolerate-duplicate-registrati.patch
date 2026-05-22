@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Thu, 22 May 2026 00:30:00 -0400
+Subject: [PATCH] PlatformObjectRegistry: tolerate duplicate registrations
+
+In conda-forge's systemlib build of TensorFlow the same process loads
+multiple shared objects that each statically embed the same
+stream_executor registrar translation units, e.g.
+
+  third_party/xla/xla/stream_executor/cuda/repeat_buffer_kernel_cuda.cc
+    GPU_KERNEL_REGISTRY_REGISTER_KERNEL_STATICALLY(RepeatBufferKernelCuda, ...)
+
+compiled into both libtensorflow_framework.so.2 and
+libtensorflow_cc.so.2.21.0 (the latter loaded via the pywrap chain at
+`import tensorflow`). PlatformObjectRegistry::GetGlobalRegistry() is a
+single process-wide singleton, but every .so that contains the registrar
+runs that registrar's module initializer once when it is loaded, so the
+second and later identical registrations reach RegisterObject() and the
+flat_hash_map insert returns inserted == false.
+
+The registrar macros (STREAM_EXECUTOR_REGISTER_OBJECT_STATICALLY and
+GPU_KERNEL_REGISTRY_REGISTER_KERNEL_STATICALLY) treat any non-OK status
+from RegisterObject() as fatal:
+
+  F0000 repeat_buffer_kernel_cuda.cc:32] Failed to register kernel:
+    ALREADY_EXISTS: Object for trait
+    ...GpuKernelRegistry...RepeatBufferKernel... and platform CUDA is
+    already registered.
+  *** Check failure stack trace: ***  -> Aborted (core dumped)
+
+so `import tensorflow` aborts before it finishes initializing.
+
+The registry's contract is that registered objects are immutable and
+cannot be overwritten, and these duplicates originate from the same
+statically-compiled registrar, so they are identical. Keep the first
+registration and report success for an identical-key duplicate instead
+of returning AlreadyExistsError. Fixing it here, at the single insert
+chokepoint, covers GPU kernels and every other
+STREAM_EXECUTOR_REGISTER_OBJECT_STATICALLY user without having to patch
+each registrar macro. This mirrors the OpRegistry duplicate-tolerance
+patch used elsewhere in this feedstock.
+---
+--- a/third_party/xla/xla/stream_executor/platform/platform_object_registry.cc
++++ b/third_party/xla/xla/stream_executor/platform/platform_object_registry.cc
+@@ -70,9 +70,18 @@
+   const auto [it, inserted] = objects_.insert(std::make_pair(
+       std::make_tuple(std::type_index(type), platform_id), std::move(object)));
+   if (!inserted) {
+-    return absl::AlreadyExistsError(absl::StrFormat(
+-        "Object for trait %s and platform %s is already registered.",
+-        type.name(), GetPlatformName(platform_id)));
++    // conda-forge: TensorFlow is split across several shared objects
++    // (libtensorflow_framework.so, libtensorflow_cc.so,
++    // _pywrap_tensorflow_internal.so). Each .so that contains a
++    // STREAM_EXECUTOR_REGISTER_OBJECT_STATICALLY / GPU_KERNEL_REGISTRY_
++    // REGISTER_KERNEL_STATICALLY registrar runs that registrar's module
++    // initializer once when it is loaded into the process, so the second
++    // and later registrations of the same (trait, platform) reach this
++    // singleton registry. Registered objects are immutable and these
++    // duplicates come from the same statically-compiled registrar, so they
++    // are identical; keep the first and treat the duplicate as success
++    // rather than aborting via the registrar macro's LOG(FATAL).
++    return absl::OkStatus();
+   }
+   return absl::OkStatus();
+ }

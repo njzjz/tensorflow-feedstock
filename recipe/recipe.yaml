@@ -113,6 +113,11 @@ source:
       # the TSL nvml lazy-dlopen stub (cuda_platform's BUILD does). Mirror
       # the dep so cuda_wheel builds get a hermetic libnvidia-ml-less DSO.
       - patches/0074-xla-cuda_executor-depend-on-tsl-cuda-nvml-stub.patch
+      # Multi-.so layout runs each stream_executor static registrar once per
+      # .so; the process-global PlatformObjectRegistry then aborts with
+      # ALREADY_EXISTS (e.g. RepeatBufferKernel) at `import tensorflow`.
+      # Tolerate identical-key duplicate registrations (keep the first).
+      - patches/0075-PlatformObjectRegistry-tolerate-duplicate-registrati.patch
       # CUDA 13: the hermetic @nvidia_nvshmem redist has no cuda13 archive
       - patches/0067-Use-the-bundled-nvshmem-stub-instead-of-the-hermetic.patch
       # CUDA 13 ships CCCL/CUB 3.x which removed APIs gpu_prim.h relies on;
