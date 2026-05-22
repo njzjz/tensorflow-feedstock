@@ -128,8 +128,13 @@ build:
   number: ${{ build + (200 if cuda_compiler_version != "None" else 0) + 25 * ((microarch_level | default("1") | int) - 1) }}
   skip:
     - win
-    # TODO: debug issues with CUDA cross-compilation
-    - aarch64 and cuda_compiler_version != "None"
+    # The active maintainers do not have the bandwidth to support
+    # linux-aarch64 or macOS (osx-64 and osx-arm64) at this time, so these
+    # platforms are skipped. This leaves linux-64 (x86_64), where the CPU
+    # and CUDA variants are built and tested. Contributions to re-enable
+    # aarch64/osx are welcome.
+    - aarch64
+    - osx
 
 outputs:
   # Staging output: runs the full Bazel build and installs all artifacts to
