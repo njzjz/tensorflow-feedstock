@@ -39,6 +39,11 @@ cp ${RECIPE_DIR}/pybind11_protobuf/*.patch ${SRC_DIR}/third_party/pybind11_proto
 # build_common.sh together with $PREFIX/include/python.
 cp ${RECIPE_DIR}/tf_proto_descriptor_guard.h $PREFIX/include/tf_proto_descriptor_guard.h
 cp ${RECIPE_DIR}/tf_proto_descriptor_guard_impl.h $PREFIX/include/tf_proto_descriptor_guard_impl.h
+# systemlib abseil flag guard (see tf_absl_flag_guard.h): force-included into
+# every C++ TU; makes ABSL_FLAG definitions stop registering in the shared
+# libabseil FlagRegistry so the same flag embedded in >1 TF .so does not abort
+# `import tensorflow`. Installed here for bare-name -include resolution.
+cp ${RECIPE_DIR}/tf_absl_flag_guard.h $PREFIX/include/tf_absl_flag_guard.h
 
 sed -i.bak "s;@@PREFIX@@;$PREFIX;" third_party/pybind11_protobuf/0002-Add-Python-include-path.patch
 
@@ -451,6 +456,16 @@ build --copt=-include --copt=tf_proto_descriptor_guard.h
 build --host_copt=-include --host_copt=tf_proto_descriptor_guard.h
 build --per_file_copt=.*\.pb\.cc\$@-include,tf_proto_descriptor_guard_impl.h
 build --host_per_file_copt=.*\.pb\.cc\$@-include,tf_proto_descriptor_guard_impl.h
+# systemlib abseil flag guard (see tf_absl_flag_guard.h): force-included into
+# the (few) translation units that define an ABSL_FLAG, overriding absl's
+# ABSL_FLAG_IMPL_REGISTRAR so ABSL_FLAG defines FLAGS_<name> without inserting
+# it into the process-global shared-libabseil FlagRegistry. Prevents the
+# duplicate-flag abort when the same flag TU is embedded in >1 TF .so. Scoped
+# via --per_file_copt to just the ABSL_FLAG-defining files (enumerated from the
+# 2.21.0 source) so it does not re-key the whole build nor pull absl/flags into
+# unrelated TUs; applying it to a file without ABSL_FLAG is a harmless no-op.
+build --per_file_copt=.*(common_runtime/next_pluggable_device/flags|common_runtime/next_pluggable_device/next_pluggable_device|runtime_fallback/bef_executor_flags|tfrt/saved_model/saved_model_testutil|gpu/cl/testing/performance_profiling|cpu/benchmarks/multi_benchmark_config|coordination/coordination_service_agent|coordination/coordination_service|tsl/platform/threadpool|tsl/util/filewrapper)\.cc\$@-include,tf_absl_flag_guard.h
+build --host_per_file_copt=.*(common_runtime/next_pluggable_device/flags|common_runtime/next_pluggable_device/next_pluggable_device|runtime_fallback/bef_executor_flags|tfrt/saved_model/saved_model_testutil|gpu/cl/testing/performance_profiling|cpu/benchmarks/multi_benchmark_config|coordination/coordination_service_agent|coordination/coordination_service|tsl/platform/threadpool|tsl/util/filewrapper)\.cc\$@-include,tf_absl_flag_guard.h
 EOF
 
 # Per-variant crosstool. The CPU build uses the conda gen-bazel-toolchain
@@ -584,3 +599,4 @@ rm -rf $PREFIX/include/python
 # The systemlib protobuf descriptor guard headers are build-only; never package them.
 rm -f $PREFIX/include/tf_proto_descriptor_guard.h
 rm -f $PREFIX/include/tf_proto_descriptor_guard_impl.h
+rm -f $PREFIX/include/tf_absl_flag_guard.h
