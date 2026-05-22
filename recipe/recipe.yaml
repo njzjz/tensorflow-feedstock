@@ -134,12 +134,12 @@ build:
   skip:
     - win
     # The active maintainers do not have the bandwidth to support
-    # linux-aarch64 or macOS (osx-64 and osx-arm64) at this time, so these
+    # linux-aarch64 or macOS (osx-64) at this time, so these
     # platforms are skipped. This leaves linux-64 (x86_64), where the CPU
     # and CUDA variants are built and tested. Contributions to re-enable
-    # aarch64/osx are welcome.
+    # aarch64/osx x86  are welcome.
     - aarch64
-    - osx
+    - osx and x86_64
 
 outputs:
   # Staging output: runs the full Bazel build and installs all artifacts to
