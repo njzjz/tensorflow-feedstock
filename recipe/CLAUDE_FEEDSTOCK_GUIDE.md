@@ -243,6 +243,18 @@ These are not hypothetical — each one cost time in this session.
 - **Stale `output/bld` dirs not cleaning.** `rm -rf output/bld` silently failed
   because Bazel marks its install tree read-only — 40 stale dirs accumulated. Use
   `chmod -R u+w` before `rm`, or `find ... -delete` with permission fixes.
+- **Force-linking / symlinking CUDA driver+stub libs (a long rabbit hole).** We
+  added `-lnvidia-ml`/`-lcusparse` to `LDFLAGS` and symlinked `libcuda.so.1`/
+  `libnvidia-ml.so.1` stubs into `$PREFIX/lib` to satisfy build-time tools. But
+  under `--config=cuda_wheel` (`include_cuda_libs=false`) XLA already routes
+  every CUDA lib through its in-tree lazy-dlopen stubs (`//xla/tsl/cuda:{cuda,
+  nvml,cusparse,...}`), so the `.so`s should have *no* `DT_NEEDED` for them.
+  Force-linking via `LDFLAGS` leaks an unconditional `NEED` into every output
+  (Bazel reorders linkopts and strips any `--as-needed` scope), and NVML ships
+  only with the driver, so `import tensorflow` then fails in the conda test env.
+  Lesson: never put CUDA libs in `LDFLAGS` or symlink their stubs into
+  `$PREFIX/lib`; if a target genuinely references a CUDA symbol, add the matching
+  `//xla/tsl/cuda:<lib>` stub to its BUILD deps (patch 0074).
 
 ---
 
@@ -262,6 +274,7 @@ Concrete error → fix pairs from this build. Expect these to recur on the next 
 | CUDA: conda headers/libs missing (`sqlite3ext.h`, `absl/...`) | Routing through TF's CUDA crosstool drops the conda toolchain's baked-in `-isystem $PREFIX/include` | Re-supply conda include/lib via `CPATH` and crosstool config (`e342b9b`, `1a298d2`) |
 | CUDA: `'cub/iterator/counting_input_iterator.cuh' file not found` | CUDA 13.0 bundles **CCCL/CUB 3.0.1**, which removed/relocated APIs TF 2.21.0's `gpu_prim.h` uses (`CountingInputIterator`, `TransformInputIterator`, `NumericTraits`, `Int2Type`, …) | Backport upstream commit `ff3bc75` *"Make tensorflow buildable with CCCL v3.x"*; flatten CUDA 13 cccl headers so `cub/`/`thrust/` resolve (`556f356`) |
 | `import tensorflow` SIGABRT — `File already exists in database: ...exported_model.proto` | protobuf descriptor double-registration: a proto compiled into two libraries | Ensure protobuf is consistently systemized vs vendored; see commits `67000d4`/`b689f1c` on `tf_proto_library` dep chains |
+| `import tensorflow`: `libnvidia-ml.so.1: cannot open shared object file` | `-lnvidia-ml`/`-lcusparse` in `LDFLAGS` (or a `$PREFIX/lib` stub symlink) baked a hard `DT_NEEDED` into every `.so`; NVML ships only with the driver | Do **not** force-link/symlink CUDA libs — `--config=cuda_wheel` routes them through XLA's lazy-dlopen stubs. If a target needs a CUDA symbol, add `//xla/tsl/cuda:<lib>` to its BUILD deps (patch 0074) |
 
 Cross-cutting toolchain notes:
 - **Hermetic CUDA vs conda CUDA.** TF defaults to hermetic CUDA redists. The
