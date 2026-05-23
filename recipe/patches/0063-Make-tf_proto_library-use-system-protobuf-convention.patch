@@ -3,14 +3,10 @@ From: Mark Harfouche <mark.harfouche@gmail.com>
 Date: Fri, 16 May 2026 00:00:00 -0400
 Subject: [PATCH] tf_proto_library: srcs-based py_proto_library convention
 
-TF 2.21.0's tf_proto_library calls py_proto_library with the modern
-deps=[proto_library] convention, but the feedstock's systemlib
-py_proto_library is the old srcs-based macro. Call it srcs-based, with
-deps chained as the _py_proto targets of the proto deps (well-known
-protobuf protos skipped -- the systemlib macro handles them). The _py
-wrapper library depends on the _py_proto targets rather than listing
-them as srcs. cc_proto_library is left on the modern convention (its
-shim now uses Bazel's native rule).
+Make tf_proto_library call the feedstock's old srcs-based systemlib
+py_proto_library instead of the modern deps=[proto_library] convention TF
+2.21.0 uses, chaining deps as the proto deps' _py_proto targets (skipping
+well-known protos). cc_proto_library stays on the modern native shim.
 ---
 diff --git a/third_party/xla/xla/tsl/platform/default/build_config.bzl b/third_party/xla/xla/tsl/platform/default/build_config.bzl
 index fdb624ea..1e862d0f 100644

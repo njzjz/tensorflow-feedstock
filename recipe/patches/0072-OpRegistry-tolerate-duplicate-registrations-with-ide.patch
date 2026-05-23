@@ -4,30 +4,13 @@ Date: Wed, 20 May 2026 01:09:25 +0000
 Subject: [PATCH] OpRegistry: tolerate duplicate registrations with identical
  OpDef
 
-In conda-forge's systemlib build of TensorFlow the same process loads
-multiple shared objects that each statically embed the same built-in
-op-registration translation units (e.g. function_ops.cc's
-REGISTER_SYSTEM_OP("_Arg")):
-
-  tensorflow/libtensorflow_framework.so.2   (pywrap framework)
-  lib/libtensorflow_cc.so.2.21.0            (libtensorflow_cc package; loaded
-                                             via DT_NEEDED of the pywrap
-                                             _pywrap_cpu_feature_guard.so)
-
-OpRegistry::Global() resolves to a single singleton across them, but each
-.so's _GLOBAL__sub_I_function_ops.cc static initializer independently calls
-OpRegistry::Global()->Register(builder_for__Arg), pushing TWO _Arg entries
-onto the deferred queue. The first ProcessRegistrations() to drain the
-queue -- typically TF_LoadLibrary(_audio_microfrontend_op.so) reached via
-`import tensorflow` -> tf.lite.python.lite -> load_op_library() -- then
-fails with AlreadyExistsError on the second _Arg.
-
-Fix: in OpRegistry::RegisterAlreadyLocked, when registry_.try_emplace would
-fail because the op is already registered, compare the new OpDef to the
-existing one via OpDefEqual. If they are identical, silently accept the
-duplicate and skip the watcher callback (so the duplicate is not
-mis-attributed to a currently-loading custom-op .so). A divergent OpDef
-for the same name still errors as before.
+In the systemlib build, both libtensorflow_framework.so and
+libtensorflow_cc.so embed the same op-registration TUs (e.g.
+function_ops.cc's _Arg), so OpRegistry's deferred queue gets two identical
+entries and the first ProcessRegistrations() aborts with AlreadyExistsError
+at `import tensorflow`. Make RegisterAlreadyLocked silently accept (and skip
+the watcher callback for) a duplicate whose OpDef matches via OpDefEqual; a
+divergent OpDef for the same name still errors.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 ---

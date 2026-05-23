@@ -99,31 +99,20 @@ source:
       # tsl/platform:protobuf must use the systemlib flat protobuf target
       # (no upstream src/google/protobuf/io sub-package in systemlib)
       - patches/0071-_protobuf_deps-use-the-systemlib-flat-protobuf-targe.patch
-      # Two TF .so's (libtensorflow_framework.so.2 from the pywrap wheel and
-      # lib/libtensorflow_cc.so.2.21.0 from the libtensorflow_cc package) each
-      # statically embed function_ops.cc and so both push _Arg onto the single
-      # OpRegistry::Global() deferred queue at process startup. The first
-      # load_op_library() (microfrontend, via `import tensorflow`) drains the
-      # queue and aborts with AlreadyExistsError. Make RegisterAlreadyLocked
-      # silently accept a duplicate when the OpDef matches the existing one.
+      # OpRegistry: accept identical-OpDef duplicate registrations from the two
+      # TF .so's that both embed the op-registration TUs (systemlib build)
       - patches/0072-OpRegistry-tolerate-duplicate-registrations-with-ide.patch
       # TF 2.21.0 pins h5py < 3.15.0; conda-forge ships 3.16.0+. Drop upper.
       - patches/0073-Loosen-h5py-requirement-upper-bound.patch
-      # XLA cuda_executor calls NVML directly but its BUILD didn't pull in
-      # the TSL nvml lazy-dlopen stub (cuda_platform's BUILD does). Mirror
-      # the dep so cuda_wheel builds get a hermetic libnvidia-ml-less DSO.
+      # XLA cuda_executor: add the TSL nvml lazy-dlopen stub dep (as
+      # cuda_platform has) so cuda_wheel DSOs don't hard-NEED libnvidia-ml
       - patches/0074-xla-cuda_executor-depend-on-tsl-cuda-nvml-stub.patch
-      # Multi-.so layout runs each stream_executor static registrar once per
-      # .so; the process-global PlatformObjectRegistry then aborts with
-      # ALREADY_EXISTS (e.g. RepeatBufferKernel) at `import tensorflow`.
-      # Tolerate identical-key duplicate registrations (keep the first).
+      # PlatformObjectRegistry: tolerate identical-key duplicate registrations
+      # from the per-.so stream_executor registrars (keep the first)
       - patches/0075-PlatformObjectRegistry-tolerate-duplicate-registrati.patch
-      # NB: the analogous abseil-flag duplicate-registration abort (the same
-      # flag TU embedded in libtensorflow_framework.so and libtensorflow_cc.so
-      # registering twice in the one shared-libabseil FlagRegistry) is handled
-      # NOT by a patch but by the force-included tf_absl_flag_guard.h (see
-      # build_common.sh), because systemized absl cannot be patched to tolerate
-      # it. That guard supersedes the earlier per-flag env-var patch 0076.
+      # NB: the analogous abseil-flag duplicate-registration abort is handled
+      # not by a patch but by the force-included tf_absl_flag_guard.h (see
+      # build_common.sh), because systemized absl cannot be patched.
       # CUDA 13: the hermetic @nvidia_nvshmem redist has no cuda13 archive
       - patches/0067-Use-the-bundled-nvshmem-stub-instead-of-the-hermetic.patch
       # CUDA 13 ships CCCL/CUB 3.x which removed APIs gpu_prim.h relies on;

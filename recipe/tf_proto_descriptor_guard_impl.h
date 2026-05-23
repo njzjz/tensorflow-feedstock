@@ -1,54 +1,25 @@
 // tf_proto_descriptor_guard_impl.h
 //
-// conda-forge tensorflow-feedstock: systemlib (shared) protobuf guard
-// -- implementation part, force-included (via --per_file_copt) into the
-// generated .pb.cc files ONLY.
+// conda-forge tensorflow-feedstock: systemlib (shared) protobuf guard,
+// implementation part, force-included (via --per_file_copt) into the
+// generated .pb.cc files ONLY (they already pull the heavy protobuf/absl
+// C++17 headers it needs). See tf_proto_descriptor_guard.h for the rationale.
 //
-// See tf_proto_descriptor_guard.h for the full rationale. This header carries
-// the inline definition of the guarded descriptor-registration entry point.
-// It is restricted to .pb.cc translation units because it pulls in heavy
-// protobuf/absl headers (C++17); .pb.cc files already include those and are
-// already built as C++17, so that is safe here but would not be in arbitrary
-// vendored sources.
-//
-// IMPLEMENTATION NOTE -- this is an exact functional clone of protobuf's
-// own google::protobuf::internal::AddDescriptors() (protobuf 6.33.x). That
-// function, disassembled from the conda libprotobuf.so, is:
-//
-//   void AddDescriptors(const DescriptorTable* table) {
-//     if (table->is_initialized) return;          // per-.so idempotency
-//     table->is_initialized = true;
-//     InitProtobufDefaults();                     // (defaults-state guarded)
-//     InitializeFileDescriptorDefaultInstances();
-//     for (i in 0..num_deps) if (deps[i]) AddDescriptors(deps[i]);
-//     DescriptorPool::InternalAddGeneratedFile(descriptor, size);
-//     MessageFactory::InternalRegisterGeneratedFile(table);
-//   }
-//
-// It is NOT wrapped in absl::call_once -- the DescriptorTable::once flag is
-// owned exclusively by AssignDescriptors()/AssignDescriptorsImpl() (the lazy
-// reflection initialiser). Consuming `once` here would make the later
-// AssignDescriptors() call_once a silent no-op, leaving message reflection
-// unassigned and crashing TextFormat / Any handling. So the guarded clone
-// below also avoids `once` entirely; static initialisers run single-threaded
-// so the bare `is_initialized` self-check is sufficient.
-//
-// The ONLY behavioural change vs the original: InternalAddGeneratedFile() --
-// the call that aborts on a duplicate -- is skipped when the file is already
-// present in the process-global generated descriptor database (i.e. it was
-// registered by another TF shared object). Everything else still runs so
-// this .so's own MessageFactory entry and default instances are set up.
+// AddDescriptors_TfGuarded below is a functional clone of protobuf 6.33.x's
+// google::protobuf::internal::AddDescriptors (no absl::call_once -- the
+// DescriptorTable::once flag belongs to the lazy AssignDescriptors(); static
+// init is single-threaded so the is_initialized self-check suffices). The one
+// behavioural change: skip InternalAddGeneratedFile() (the call that aborts on
+// a duplicate) when the file is already in the process-global database, while
+// still setting up this .so's defaults and MessageFactory entry.
 
 #ifndef TF_PROTO_DESCRIPTOR_GUARD_IMPL_H_
 #define TF_PROTO_DESCRIPTOR_GUARD_IMPL_H_
 
 #if defined(__cplusplus)
 
-// tf_proto_descriptor_guard.h installs `#define AddDescriptors
-// AddDescriptors_TfGuarded`. Undefine it while this header is being parsed so
-// the protobuf headers below declare their real names and so we can refer to
-// real protobuf symbols. The macro is re-installed at the end so the
-// generated .pb.cc call site is still rewritten.
+// Undefine the AddDescriptors redirect macro while parsing this header so the
+// protobuf headers below use their real names; it is re-installed at the end.
 #ifdef AddDescriptors
 #undef AddDescriptors
 #endif
@@ -65,8 +36,7 @@ namespace protobuf {
 namespace internal {
 
 // Guarded clone of google::protobuf::internal::AddDescriptors (see file
-// comment). inline => one definition per .pb.cc TU, merged by the linker to
-// one copy per shared object.
+// comment). inline => merged to one copy per shared object.
 inline void AddDescriptors_TfGuarded(const DescriptorTable* table) {
   // Per-.so idempotency, exactly like the real AddDescriptors.
   if (table->is_initialized) {
@@ -74,14 +44,11 @@ inline void AddDescriptors_TfGuarded(const DescriptorTable* table) {
   }
   table->is_initialized = true;
 
-  // Reflection refers to the default fields, so make sure they are
-  // initialised (InitProtobufDefaults is an inline cheap-path wrapper around
-  // InitProtobufDefaultsSlow).
+  // Ensure default fields are initialised (reflection refers to them).
   InitProtobufDefaults();
   InitializeFileDescriptorDefaultInstances();
 
-  // Register dependency files first -- through the guarded path, so a dep
-  // shared with another TF .so is also tolerated.
+  // Register dependency files first, through the guarded path.
   for (int i = 0; i < table->num_deps; ++i) {
     if (table->deps[i] != nullptr) {
       AddDescriptors_TfGuarded(table->deps[i]);
@@ -89,11 +56,8 @@ inline void AddDescriptors_TfGuarded(const DescriptorTable* table) {
   }
 
   // The one guarded step: only add the encoded file to the process-global
-  // generated descriptor database if it is not already there. A second TF
-  // .so re-registering the same file is exactly what makes protobuf abort
-  // ("File already exists in database"). FindFileByName on the generated
-  // EncodedDescriptorDatabase is a pure lookup -- it neither builds
-  // descriptors nor aborts.
+  // database if not already there (a second .so re-registering it is what
+  // aborts). FindFileByName is a pure lookup -- it never builds or aborts.
   bool already_registered = false;
   DescriptorDatabase* db = DescriptorPool::internal_generated_database();
   if (db != nullptr) {
@@ -102,12 +66,9 @@ inline void AddDescriptors_TfGuarded(const DescriptorTable* table) {
   }
   if (!already_registered) {
     DescriptorPool::InternalAddGeneratedFile(table->descriptor, table->size);
-    // Register the generated-message factory entry for this file only when
-    // this .so is the first to register it -- keeping a single owner of both
-    // the descriptor and the factory mapping. When another TF .so already
-    // registered the file, that .so's table owns the factory entry; this
-    // .so's own message types still reflect correctly because reflection is
-    // assigned lazily by AssignDescriptors() off the (shared) generated pool.
+    // Register the factory entry only when this .so is the first to register
+    // the file (single owner). Other .so's reflect fine: reflection is
+    // assigned lazily by AssignDescriptors() off the shared generated pool.
     MessageFactory::InternalRegisterGeneratedFile(table);
   }
 }

@@ -3,10 +3,9 @@ From: Mark Harfouche <mark.harfouche@gmail.com>
 Date: Fri, 16 May 2026 00:00:00 -0400
 Subject: [PATCH] Make cc_proto_library shim use the modern native rule
 
-The cc_proto_library systemlib shim re-exported the old srcs-based
-macro, but TF 2.21.0 tf_proto_library and vendored deps such as riegeli
-call cc_proto_library with the modern deps=[proto_library] convention.
-Bazel 7's native cc_proto_library handles that; the system libprotobuf
+Point the cc_proto_library systemlib shim at Bazel 7's native rule so it
+accepts the modern deps=[proto_library] convention used by TF 2.21.0's
+tf_proto_library and vendored deps like riegeli; system libprotobuf
 supplies the runtime.
 ---
 diff --git a/third_party/systemlibs/protobuf.bazel.cc_proto_library.bzl b/third_party/systemlibs/protobuf.bazel.cc_proto_library.bzl

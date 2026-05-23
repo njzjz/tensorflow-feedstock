@@ -21,8 +21,7 @@ for ver in 3.10 3.11 3.12 3.13; do
 done
 bazel clean
 
-# Bazel unpacks the hermetic Python toolchains (and its own install tree)
-# read-only. That prevents rattler-build from removing build_env when it
-# moves on to package the inheriting outputs, aborting the build after only
-# the first package. Restore write permission so packaging can complete.
+# Bazel unpacks its toolchains/install tree read-only, which blocks
+# rattler-build from cleaning build_env for the inheriting outputs. Restore
+# write permission so packaging can complete.
 chmod -R u+w "${BUILD_PREFIX}" 2>/dev/null || true

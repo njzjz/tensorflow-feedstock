@@ -3,12 +3,10 @@ From: Mark Harfouche <mark.harfouche@gmail.com>
 Date: Tue, 19 May 2026 00:00:00 -0400
 Subject: [PATCH] _protobuf_deps: use the systemlib flat protobuf target
 
-The systemlib protobuf BUILD (conda libprotobuf) does not declare the
-upstream src/google/protobuf/io sub-package, nor the differencer /
-json_util / type_resolver / delimited_message_util split targets. conda
-libprotobuf is one complete library; the flat :protobuf / :protobuf_lite
-targets provide all of it. Without this, @tsl//tsl/platform:protobuf fails
-analysis ("no such package @com_google_protobuf//src/google/protobuf/io").
+Point tsl/platform:protobuf at the systemlib flat :protobuf /
+:protobuf_lite targets, since conda's single libprotobuf has no
+src/google/protobuf/io sub-package or differencer/json_util/etc. split
+targets, which otherwise fail analysis ("no such package ...").
 ---
 --- a/third_party/xla/xla/tsl/platform/default/build_config.bzl
 +++ b/third_party/xla/xla/tsl/platform/default/build_config.bzl

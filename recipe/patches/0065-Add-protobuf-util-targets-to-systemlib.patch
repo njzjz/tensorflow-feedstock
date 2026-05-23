@@ -3,11 +3,10 @@ From: Mark Harfouche <mark.harfouche@gmail.com>
 Date: Fri, 16 May 2026 00:00:00 -0400
 Subject: [PATCH] Add protobuf util targets to systemlib protobuf.BUILD
 
-TF 2.21.0 / XLA reference @com_google_protobuf//: utility targets
-(field_mask_util, differencer, json_util, delimited_message_util,
-type_resolver) and well_known_protos that the systemlib protobuf.BUILD
-did not declare. The utility code ships inside libprotobuf, so alias
-the cc_libraries to :protobuf; well_known_protos is the WKT .proto set.
+Declare the protobuf utility targets (field_mask_util, differencer,
+json_util, delimited_message_util, type_resolver) and well_known_protos
+that TF 2.21.0/XLA reference but the systemlib protobuf.BUILD lacked,
+aliasing the cc_libraries to :protobuf since the code ships in libprotobuf.
 ---
 diff --git a/third_party/systemlibs/protobuf.BUILD b/third_party/systemlibs/protobuf.BUILD
 index cf85b5ab..7d2377e6 100644

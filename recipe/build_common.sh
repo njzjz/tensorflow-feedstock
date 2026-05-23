@@ -7,13 +7,11 @@ if [[ "${CI:-}" == "github_actions" ]]; then
 fi
 
 # hmaarrfk - 2025/07/06
-# Address incompatibility with newer ABSEL
-# Make libprotobuf-python-headers visible for pybind11_protobuf
-# These files will be deleted at the end of the build.
+# Make libprotobuf-python-headers visible for pybind11_protobuf (deleted at
+# end of build). pybind11_protobuf's proto_api.h includes <Python.h>, so also
+# put the host python headers on the same -I$PREFIX/include/python path.
 mkdir -p $PREFIX/include/python
 cp -r $PREFIX/include/google $PREFIX/include/python/
-# pybind11_protobuf's proto_api.h includes <Python.h>; make the host
-# python headers reachable on the same -I$PREFIX/include/python path.
 for _pyinc in $PREFIX/include/python3.*; do
   [ -d "$_pyinc" ] && cp -rn "$_pyinc"/. $PREFIX/include/python/ 2>/dev/null || true
 done
@@ -21,35 +19,19 @@ done
 cp ${RECIPE_DIR}/pybind11_protobuf/*.patch ${SRC_DIR}/third_party/pybind11_protobuf/.
 
 # hmaarrfk - 2026/05/19 - systemlib (shared) protobuf descriptor guard.
-# TF embeds the same generated proto .pb.o into many shared objects
-# (libtensorflow_framework.so, libtensorflow_cc.so, the _pywrap_*.so python
-# extensions, tflite/profiler plugin .so's). With conda's *shared*
-# libprotobuf.so there is one process-global generated-descriptor database,
-# and the second .so to load re-registers a proto file already registered by
-# the first -> protobuf aborts ("File already exists in database"). Two
-# force-included headers fix this while keeping shared protobuf:
-#   * tf_proto_descriptor_guard.h is force-included into EVERY TU. It is
-#     featherweight (no protobuf/absl headers) so it is safe even in vendored
-#     sources built with an older -std or as plain C. It just installs a macro
-#     redirecting the generated AddDescriptors() call site.
-#   * tf_proto_descriptor_guard_impl.h is force-included into the .pb.cc files
-#     only (--per_file_copt); it carries the inline guarded definition.
-# Both are installed into $PREFIX/include (a toolchain -isystem dir) so a
-# bare-name -include resolves; removed from the package at the end of
-# build_common.sh together with $PREFIX/include/python.
+# Install the two force-included guard headers into $PREFIX/include (a
+# toolchain -isystem dir, for bare-name -include); see
+# tf_proto_descriptor_guard.h for why. Removed at end of build_common.sh.
 cp ${RECIPE_DIR}/tf_proto_descriptor_guard.h $PREFIX/include/tf_proto_descriptor_guard.h
 cp ${RECIPE_DIR}/tf_proto_descriptor_guard_impl.h $PREFIX/include/tf_proto_descriptor_guard_impl.h
-# systemlib abseil flag guard (see tf_absl_flag_guard.h): force-included into
-# every C++ TU; makes ABSL_FLAG definitions stop registering in the shared
-# libabseil FlagRegistry so the same flag embedded in >1 TF .so does not abort
-# `import tensorflow`. Installed here for bare-name -include resolution.
+# systemlib abseil flag guard (see tf_absl_flag_guard.h); installed for
+# bare-name -include resolution, removed at end of build.
 cp ${RECIPE_DIR}/tf_absl_flag_guard.h $PREFIX/include/tf_absl_flag_guard.h
 
 sed -i.bak "s;@@PREFIX@@;$PREFIX;" third_party/pybind11_protobuf/0002-Add-Python-include-path.patch
 
-# In abseil-cpp 20260107, the template aliases absl::Nonnull<T>, absl::Nullable<T>,
-# and absl::NullabilityUnknown<T> were removed. TF 2.19.1 still uses them in many
-# files. Patch the installed header to re-add the aliases as backward-compat no-ops.
+# abseil-cpp 20260107 removed the absl::Nonnull/Nullable/NullabilityUnknown<T>
+# aliases that TF still uses; re-add them to the installed header as no-ops.
 if [[ ! -f "${SRC_DIR}/nullability_patched" ]]; then
   cat ${RECIPE_DIR}/nullability_deprecated.h >> ${BUILD_PREFIX}/include/absl/base/nullability.h
   cat ${RECIPE_DIR}/nullability_deprecated.h >> ${PREFIX}/include/absl/base/nullability.h
@@ -130,29 +112,21 @@ fi
 # bazel query 'deps(//tensorflow/tools/lib_package:libtensorflow)' --output graph > graph.in
 if [[ "${target_platform}" == osx-* ]]; then
   # Same root cause as the linux branch below: TF 2.21.0's cc_shared_library
-  # does not forward the systemlib cc_library linkopts, so the resulting
-  # libtensorflow_cc.dylib / _pywrap_tensorflow_internal.so have no
-  # LC_LOAD_DYLIB entries for the systemized grpc/sqlite3/icu/png/jpeg/gif/
-  # flatbuffers/abseil they reference. With `-undefined dynamic_lookup` the
-  # link succeeds silently and `import tensorflow` then fails at dlopen with
-  # e.g. `symbol not found: __ZN4grpc6Status2OKE` (grpc::Status::OK).
-  # macOS ld64 does not accept --no-as-needed/--export-dynamic, but listing
-  # -l<name> is enough to add the LC_LOAD_DYLIB entry. abseil ships ~90
-  # dylibs; enumerate them like the linux branch.
+  # does not forward the systemlib linkopts, so the TF dylibs lack
+  # LC_LOAD_DYLIB entries for the systemized libs and `import tensorflow`
+  # fails at dlopen. ld64 rejects --no-as-needed/--export-dynamic, but listing
+  # -l<name> adds the entry; abseil ships ~90 dylibs, so enumerate them.
   _absl_libs=""
   for _f in "${PREFIX}"/lib/libabsl_*.dylib; do
     [ -e "$_f" ] && _absl_libs="${_absl_libs} -l$(basename "$_f" .dylib | sed 's/^lib//')"
   done
   export LDFLAGS="${LDFLAGS} -framework CoreFoundation -Xlinker -undefined -Xlinker dynamic_lookup -lprotobuf -lgrpc -lgrpc++ -lgpr -lsqlite3 -lpng -ljpeg -lgif -lflatbuffers -licui18n -licuuc -licudata -lsnappy -lcurl -lz -lssl -lcrypto${_absl_libs}"
 else
-  # TF 2.21.0's cc_shared_library does not forward the systemlib
-  # cc_library linkopts, so the libtensorflow*.so end up with no DT_NEEDED
-  # for the systemized third-party libraries they reference:
-  # libtensorflow_framework.so's op-generator genrule tools crash dlopen-ing
-  # it, and libtensorflow_cc.so fails to link with tens of thousands of
-  # undefined symbols (protobuf, grpc, sqlite3, icu, png, jpeg, gif,
-  # flatbuffers). Explicitly force-link every systemized library; abseil
-  # ships ~90 shared objects, so enumerate them.
+  # TF 2.21.0's cc_shared_library does not forward the systemlib linkopts, so
+  # the libtensorflow*.so lack DT_NEEDED for the systemized third-party libs:
+  # host tools crash dlopen-ing libtensorflow_framework.so and
+  # libtensorflow_cc.so fails to link. Force-link every systemized library;
+  # abseil ships ~90 shared objects, so enumerate them.
   _absl_libs=""
   for _f in "${PREFIX}"/lib/libabsl_*.so; do
     [ -e "$_f" ] && _absl_libs="${_absl_libs} -l$(basename "$_f" .so | sed 's/^lib//')"
@@ -169,27 +143,17 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
 	NVARCH=${ARCH}
     fi
     # NB: do NOT force-link libnvidia-ml or libcusparse into LDFLAGS here.
-    # Under `--config=cuda_wheel`, XLA's in-tree lazy-dlopen stubs
-    # (third_party/xla/xla/tsl/cuda/{nvml,cusparse,cudart,cublas,...}_stub.cc)
-    # are aliased in by the `:nvml`/`:cusparse`/... targets, so the resulting
-    # .so's have no DT_NEEDED for those libs and CUDA libs are dlopen'd
-    # lazily at first GPU use (matches jaxlib's hermetic CUDA layout).
-    # Adding `-lnvidia-ml` to LDFLAGS, even bracketed with `--as-needed`,
-    # gets forwarded through the per-token `--linkopt=` loop further down
-    # this file; Bazel reorders linkopts by class, which strips the
-    # `--as-needed` scope and ends up making every output (including
-    # libtensorflow_framework.so.2.21.0 and _pywrap_cpu_feature_guard.so)
-    # unconditionally NEED libnvidia-ml.so.1 / libcusparse.so.12. NVML
-    # ships only with the NVIDIA driver (no conda-forge package), so the
-    # conda test env fails to `import tensorflow`. cusparse is in
-    # libcusparse but there is no reason to hard-need it either.
-    # CUDA device code is compiled by nvcc with clang 18 as the host compiler
-    # (TF_NVCC_CLANG). clang 18 itself cannot compile CUDA 13 device code --
-    # CUDA 13 removed headers like texture_fetch_functions.h and clang only
-    # gained CUDA 13 support in v21 -- so nvcc must handle the .cu files.
+    # Under --config=cuda_wheel XLA's lazy-dlopen stubs leave the .so's with
+    # no DT_NEEDED for them (CUDA libs are dlopen'd at first GPU use). Adding
+    # -lnvidia-ml to LDFLAGS leaks through the per-token --linkopt= loop below
+    # and -- because Bazel reorders linkopts and drops the --as-needed scope --
+    # makes every output unconditionally NEED libnvidia-ml.so.1, which ships
+    # only with the driver (no conda-forge package), breaking `import
+    # tensorflow`.
+    # CUDA device code is built by nvcc with clang 18 as host compiler
+    # (TF_NVCC_CLANG); clang 18 alone cannot compile CUDA 13 device code.
     # configure.py reads GCC_HOST_COMPILER_PATH on the TF_CUDA_CLANG=0 path;
-    # point it at clang (it only checks the path exists), which is exactly
-    # the host compiler nvcc uses under TF_NVCC_CLANG.
+    # point it at clang (it only checks the path exists).
     export TF_CUDA_CLANG=0
     export TF_NVCC_CLANG=1
     export TF_NEED_CLANG=1
@@ -199,12 +163,9 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
     # nvcc / cicc / ptxas live under nvvm/bin in the conda cuda-nvcc package.
     export PATH="${PATH}:${BUILD_PREFIX}/nvvm/bin"
 
-    # XLA pulls absl btree containers into some CUDA device translation units.
     # clang's CUDA-device frontend mis-parses absl btree.h's `friend iterator;`
-    # / `friend const_iterator;` as an elaborated-type-specifier on a type
-    # alias (clang bug llvm/llvm-project#29934). btree.h is a conda-package
-    # header, so rewrite the alias-based friends into a template friend of
-    # btree_iterator (a semantically-equivalent superset).
+    # on a type alias (llvm/llvm-project#29934). Rewrite the alias-based friends
+    # into an equivalent template friend of btree_iterator in the conda header.
     _btree_h="${PREFIX}/include/absl/container/internal/btree.h"
     if [ -f "${_btree_h}" ]; then
       sed -i \
@@ -237,11 +198,9 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
         export NCCL_INSTALL_PATH=$PREFIX
         export CUDA_HOME="${BUILD_PREFIX}/targets/${NVARCH}-linux"
         export TF_CUDA_PATHS="${BUILD_PREFIX}/targets/${NVARCH}-linux,${PREFIX}/targets/${NVARCH}-linux"
-        # CUDA 13's cuda-cccl package ships CUB/Thrust/libcudacxx under
-        # targets/<arch>-linux/include/cccl/{cub,thrust,cuda,nv}, but TF core's
-        # gpu_prim.h does #include "cub/..." and @cuda_cccl//:headers globs
-        # include/cub/** -- a flat layout. Promote the cccl/ contents up to the
-        # flat include/ layout the glob expects, before the trees are merged.
+        # CUDA 13's cuda-cccl ships CUB/Thrust/libcudacxx under
+        # include/cccl/, but gpu_prim.h and @cuda_cccl//:headers expect the
+        # flat include/ layout; promote the cccl/ contents up before merging.
         for _t in "${PREFIX}" "${BUILD_PREFIX}"; do
             _cccl="${_t}/targets/${NVARCH}-linux/include/cccl"
             if [ -d "${_cccl}" ]; then
@@ -268,19 +227,6 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
         ln -sf ${BUILD_PREFIX}/bin/nvlink ${BUILD_PREFIX}/targets/${NVARCH}-linux/bin/nvlink
         ln -sf ${BUILD_PREFIX}/bin/ptxas ${BUILD_PREFIX}/targets/${NVARCH}-linux/bin/ptxas
 
-        # NB: we used to symlink the libcuda.so driver stub into ${PREFIX}/lib
-        # as libcuda.so.1 here so build-time host tools (e.g.
-        # tensorflow/python/framework/offset_counter) that load
-        # libtensorflow_framework.so could resolve its libcuda.so.1 DT_NEEDED
-        # off-GPU. That dependency predates --config=cuda_wheel: under
-        # cuda_wheel (include_cuda_libs=false, a common: flag so it applies to
-        # the exec/host config too) XLA routes the CUDA driver exclusively
-        # through its always-lazy in-tree stub (xla/tsl/cuda:cuda ->
-        # cuda_stub.cc), so libtensorflow_framework.so no longer DT_NEEDEDs
-        # libcuda.so.1 and the symlink is unnecessary. Removed; if a host tool
-        # still fails with "libcuda.so.1: cannot open", the fix is to route
-        # that tool through //xla/tsl/cuda:cuda rather than re-add the symlink.
-
         export LOCAL_CUDA_PATH="${BUILD_PREFIX}/targets/${NVARCH}-linux"
         export LOCAL_CUDNN_PATH="${PREFIX}"
         export LOCAL_NCCL_PATH="${PREFIX}"
@@ -306,10 +252,8 @@ fi
 gen-bazel-toolchain
 
 if [[ "${target_platform}" == "osx-64" ]]; then
-  # Must match the cpu key gen-bazel-toolchain bakes into bazel_toolchain's
-  # cc_toolchain_suite (darwin_x86_64); a bare "darwin" leaves the suite
-  # lookup unresolved once TF 2.21.0's apple-toolchain points crosstool_top
-  # at it, failing analysis with "does not contain a toolchain for cpu".
+  # Must match the cpu key gen-bazel-toolchain bakes into the
+  # cc_toolchain_suite (darwin_x86_64); a bare "darwin" fails suite lookup.
   TARGET_CPU=darwin_x86_64
   # See https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
   export CXXFLAGS="${CXXFLAGS} -D_LIBCPP_DISABLE_AVAILABILITY"
@@ -319,22 +263,17 @@ elif [[ "${target_platform}" == "linux-x86_64" ]]; then
   TARGET_CPU=x86_64
 fi
 
-# --cpu key for the crosstool's cc_toolchain_suite lookup. The conda
-# //bazel_toolchain suite is keyed by ${TARGET_CPU}; TF's CUDA crosstool
-# (@local_config_cuda//crosstool) suite is keyed k8/aarch64, so the CUDA
-# build needs k8 on linux-64.
+# --cpu key for the cc_toolchain_suite lookup. The conda suite is keyed by
+# ${TARGET_CPU}; TF's CUDA crosstool is keyed k8/aarch64, so CUDA needs k8.
 CC_CPU=${TARGET_CPU}
 if [[ "${cuda_compiler_version}" != "None" && "${target_platform}" == "linux-64" ]]; then
   CC_CPU=k8
 fi
 
-# build.sh invokes build_common.sh repeatedly (once per Python version, and
-# twice per version). The work tree -- including .bazelrc -- persists across
-# those invocations, so restore .bazelrc to its pristine upstream state before
-# editing/appending below. Otherwise the appended config (--cxxopt, --copt,
-# --crosstool_top, ...) accumulates duplicate flags, which changes every
-# compile command string and defeats all of Bazel's action caching, forcing a
-# full ~22k-action recompile on every single invocation.
+# build_common.sh runs many times and .bazelrc persists across runs, so
+# restore it to the pristine upstream state before appending below. Otherwise
+# the appended flags accumulate, changing every compile command and defeating
+# Bazel's action caching (a full recompile every invocation).
 if [[ ! -f .bazelrc.conda-orig ]]; then
   cp .bazelrc .bazelrc.conda-orig
 else
@@ -344,32 +283,22 @@ fi
 # Get rid of unwanted defaults
 sed -i -e "/PROTOBUF_INCLUDE_PATH/c\ " .bazelrc
 sed -i -e "/PREFIX/c\ " .bazelrc
-# TF 2.21.0's pywrap build (USE_PYWRAP_RULES, kept enabled) is what keeps each
-# protobuf descriptor in a single shared object -- disabling it caused a
-# descriptor double-registration SIGABRT at `import tensorflow`. The standalone
-# libtensorflow / libtensorflow_cc C/C++ libraries are produced by a separate
-# non-pywrap Bazel pass (see below).
-# TF's .bazelrc hardcodes -fuse-ld=lld for some configs, but conda's clang
-# ships no lld; drop it so the default linker is used.
+# TF 2.21.0's pywrap build (USE_PYWRAP_RULES, kept enabled) keeps each protobuf
+# descriptor in a single .so; the standalone libtensorflow(_cc) C/C++ libraries
+# come from a separate non-pywrap pass below.
+# TF's .bazelrc hardcodes -fuse-ld=lld but conda's clang ships no lld; drop it.
 sed -i -e "/fuse-ld=lld/d" .bazelrc
 # Ensure .bazelrc ends in a newline
 echo "" >> .bazelrc
 
 if [[ "${target_platform}" == osx-* ]]; then
-  # TF 2.21.0's common:apple-toolchain config forces Bazel's Apple Xcode
-  # crosstool (@local_config_apple_cc) for the target, host and apple
-  # crosstool slots. That bypasses the conda //bazel_toolchain (and its
-  # -isystem $PREFIX/include), so conda's protobuf/abseil headers are not
-  # found and the [for tool] proto compiles fail. Redirect that config at
-  # the conda toolchain instead.
+  # TF 2.21.0's apple-toolchain config forces Bazel's Apple Xcode crosstool,
+  # bypassing the conda //bazel_toolchain and its -isystem $PREFIX/include so
+  # proto compiles fail to find conda headers; redirect it at the conda toolchain.
   sed -i 's#@local_config_apple_cc//:toolchain#//bazel_toolchain:toolchain#g' .bazelrc
-  # TF 2.21.0's cc_shared_library does not propagate the systemlib protobuf
-  # linkopt, so libtensorflow_framework.dylib is linked with no -lprotobuf.
-  # -undefined dynamic_lookup hides the resulting undefined protobuf symbols
-  # but cannot reconcile the TLS storage class of ThreadSafeArena::
-  # thread_cache_ -- ld rejects a thread-local reference to it as a regular
-  # (undefined) symbol. Force-link conda's libprotobuf for the target and
-  # exec (host) configs so thread_cache_ resolves to its TLS definition.
+  # cc_shared_library drops the systemlib -lprotobuf, and -undefined
+  # dynamic_lookup cannot reconcile ThreadSafeArena::thread_cache_'s TLS storage
+  # class; force-link conda's libprotobuf (target + host) so it resolves.
   cat >> .bazelrc <<EOF
 build --linkopt=-L${PREFIX}/lib --linkopt=-lprotobuf
 build --host_linkopt=-L${PREFIX}/lib --host_linkopt=-lprotobuf
@@ -428,8 +357,7 @@ if [[ "${build_platform}" == linux-* ]]; then
 fi
 
 cat >> .bazelrc <<EOF
-# TF 2.21.0 defaults to a hermetic LLVM CC toolchain (rules_ml_toolchain);
-# the clang_local config disables it so the conda-forge compiler toolchain
+# Disable TF 2.21.0's hermetic LLVM CC toolchain so the conda-forge compiler
 # and system headers are used (--crosstool_top is set per-variant below).
 build --config=clang_local
 build --logging=6
@@ -438,56 +366,36 @@ build --define=PREFIX=${PREFIX}
 build --define=PROTOBUF_INCLUDE_PATH=${PREFIX}/include
 build --cpu=${CC_CPU}
 build --local_cpu_resources=${CPU_COUNT}
-# Persistent on-disk action cache. Survives the rattler-build output tree being
-# wiped, so the four per-Python passes here -- and subsequent builds of other
-# variants (e.g. CUDA) on the same machine -- reuse already-compiled artifacts
-# instead of recompiling from scratch. Content-addressed, so always safe; on a
-# fresh CI container /tmp is empty and this is simply a no-op.
+# Persistent content-addressed action cache so the per-Python and per-variant
+# passes reuse artifacts across the wiped output tree; a no-op on fresh CI.
 build --disk_cache=/tmp/tf-bazel-disk-cache
-# systemlib protobuf descriptor guard (see tf_proto_descriptor_guard.h).
-# 1. The featherweight guard header is force-included into every C++ TU; it
-#    only installs the AddDescriptors() redirect macro, so it is safe even in
-#    vendored sources (XNNPACK etc.) built with an older -std.
-# 2. The heavy guard implementation header is force-included into the
-#    generated .pb.cc files only, via --per_file_copt: those TUs already
-#    include the protobuf headers and are built as C++17.
-# Applied to both the target and the exec/host configs.
+# systemlib protobuf descriptor guard (see tf_proto_descriptor_guard.h):
+# force-include the featherweight header into every C++ TU and the heavy impl
+# header into .pb.cc TUs only. Applied to target and exec/host configs.
 build --copt=-include --copt=tf_proto_descriptor_guard.h
 build --host_copt=-include --host_copt=tf_proto_descriptor_guard.h
 build --per_file_copt=.*\.pb\.cc\$@-include,tf_proto_descriptor_guard_impl.h
 build --host_per_file_copt=.*\.pb\.cc\$@-include,tf_proto_descriptor_guard_impl.h
-# systemlib abseil flag guard (see tf_absl_flag_guard.h): force-included into
-# the (few) translation units that define an ABSL_FLAG, overriding absl's
-# ABSL_FLAG_IMPL_REGISTRAR so ABSL_FLAG defines FLAGS_<name> without inserting
-# it into the process-global shared-libabseil FlagRegistry. Prevents the
-# duplicate-flag abort when the same flag TU is embedded in >1 TF .so. Scoped
-# via --per_file_copt to just the ABSL_FLAG-defining files (enumerated from the
-# 2.21.0 source) so it does not re-key the whole build nor pull absl/flags into
-# unrelated TUs; applying it to a file without ABSL_FLAG is a harmless no-op.
+# systemlib abseil flag guard (see tf_absl_flag_guard.h): force-include it into
+# just the ABSL_FLAG-defining TUs (enumerated from the 2.21.0 source) so the
+# same flag in >1 TF .so does not abort; a no-op on files without ABSL_FLAG.
 build --per_file_copt=.*(common_runtime/next_pluggable_device/flags|common_runtime/next_pluggable_device/next_pluggable_device|runtime_fallback/bef_executor_flags|tfrt/saved_model/saved_model_testutil|gpu/cl/testing/performance_profiling|cpu/benchmarks/multi_benchmark_config|coordination/coordination_service_agent|coordination/coordination_service|tsl/platform/threadpool|tsl/util/filewrapper)\.cc\$@-include,tf_absl_flag_guard.h
 build --host_per_file_copt=.*(common_runtime/next_pluggable_device/flags|common_runtime/next_pluggable_device/next_pluggable_device|runtime_fallback/bef_executor_flags|tfrt/saved_model/saved_model_testutil|gpu/cl/testing/performance_profiling|cpu/benchmarks/multi_benchmark_config|coordination/coordination_service_agent|coordination/coordination_service|tsl/platform/threadpool|tsl/util/filewrapper)\.cc\$@-include,tf_absl_flag_guard.h
 EOF
 
-# Per-variant crosstool. The CPU build uses the conda gen-bazel-toolchain
-# crosstool directly. The CUDA build must route through TF's CUDA crosstool
-# instead: its host_compiler is the nvcc wrapper
-# (crosstool_wrapper_driver_is_not_gcc), which dispatches per action -- '-x
-# cuda' device files (.cu.cc from cuda_library) go to nvcc 13, everything
-# else to conda clang 18 (CLANG_CUDA_COMPILER_PATH). A blanket
-# --crosstool_top=//bazel_toolchain would force plain clang onto the device
-# files and fail on the nvcc-only copts. Mirrors TF's own config:rocm.
+# Per-variant crosstool: the CPU build uses the conda crosstool directly; the
+# CUDA build routes through TF's CUDA crosstool, whose nvcc wrapper dispatches
+# device files to nvcc 13 and everything else to conda clang 18 (a blanket
+# conda crosstool would force clang onto the device files). Mirrors config:rocm.
 if [[ "${cuda_compiler_version}" == "None" ]]; then
   cat >> .bazelrc <<EOF
 build --crosstool_top=//bazel_toolchain:toolchain
 EOF
 else
-  # TF's CUDA crosstool (generated by cuda_configure.bzl) carries none of the
-  # conda gen-bazel-toolchain customizations. Conda's header dir cannot be
-  # injected with --copt=-isystem: Bazel rejects an absolute include path that
-  # the toolchain does not declare ("references a path outside ..."). Instead
-  # feed it through CPATH -- clang reports CPATH dirs via `clang -E -v`, so
-  # cuda_configure.bzl picks $PREFIX/include up into cxx_builtin_include_dirs
-  # (declared, hence accepted), and clang also searches CPATH at compile time.
+  # TF's CUDA crosstool lacks the conda customizations, and Bazel rejects an
+  # undeclared absolute -isystem path. Feed $PREFIX/include via CPATH instead:
+  # cuda_configure.bzl picks it up into cxx_builtin_include_dirs (declared,
+  # hence accepted) and clang also searches CPATH at compile time.
   export CPATH="${PREFIX}/include${CPATH:+:${CPATH}}"
   export CPLUS_INCLUDE_PATH="${PREFIX}/include${CPLUS_INCLUDE_PATH:+:${CPLUS_INCLUDE_PATH}}"
   cat >> .bazelrc <<EOF
@@ -498,9 +406,8 @@ build --host_action_env=CPATH=${PREFIX}/include
 build --action_env=CPLUS_INCLUDE_PATH=${PREFIX}/include
 build --host_action_env=CPLUS_INCLUDE_PATH=${PREFIX}/include
 build --linkopt=-L${PREFIX}/lib --host_linkopt=-L${PREFIX}/lib
-# TF's CUDA crosstool passes --cuda-path to every compile, including plain
-# C files; clang then errors "argument unused" under its -Werror. Tell
-# clang to ignore unused command-line arguments.
+# TF's CUDA crosstool passes --cuda-path to plain C compiles too; tell clang
+# to ignore unused command-line arguments (else -Werror trips).
 build --copt=-Qunused-arguments
 build --host_copt=-Qunused-arguments
 EOF
@@ -511,14 +418,9 @@ EOF
   done
 fi
 
-# conda-forge's linux libabseil/libprotobuf/... use the GCC-compatible
-# (pre-clang-18) Itanium mangling for non-type template parameters of
-# dependent type. clang 18 changed that mangling, so TF references e.g.
-# absl::Cord's enable_if-constrained constructor under a name the conda
-# libraries do not export. Pin clang to the GCC-compatible ABI to match.
-# Only when actually building with clang: macOS uses Apple clang (which
-# rejects this flag value) and the CUDA variants build with gcc (which has
-# no -fclang-abi-compat flag at all). Both would error on it.
+# conda's linux libabseil/libprotobuf use the pre-clang-18 Itanium mangling;
+# clang 18 changed it, so pin clang to the GCC-compatible ABI to match the
+# exported symbols. Only when building with clang (Apple clang / gcc reject it).
 if [[ "${target_platform}" == linux-* && "${c_compiler}" == clang* ]]; then
   cat >> .bazelrc <<EOF
 build --cxxopt=-fclang-abi-compat=17
@@ -526,15 +428,12 @@ build --host_cxxopt=-fclang-abi-compat=17
 EOF
 fi
 
-# CUDA device code is compiled by nvcc (clang 18 cannot target CUDA 13);
-# clang remains the host compiler (TF_NVCC_CLANG, set by this config).
+# cuda_nvcc: nvcc builds device code, clang stays the host compiler.
 if [[ "${cuda_compiler_version}" != "None" ]]; then
   cat >> .bazelrc <<EOF
 build --config=cuda_nvcc
-# cuda_wheel sets --@local_config_cuda//cuda:include_cuda_libs=false, so the
-# CUDA libraries are dlopen'd lazily at first GPU use instead of hard-NEEDED
-# via DT_NEEDED. Without it (or the deprecated override_include_cuda_libs)
-# tf_wheel.bzl bails out and libtensorflow_framework.so.2 ends up needing
+# cuda_wheel sets include_cuda_libs=false so CUDA libs are dlopen'd lazily
+# rather than hard-NEEDED; without it libtensorflow_framework.so.2 would need
 # libcuda.so.1 at import time, which the conda test envs don't ship.
 build --config=cuda_wheel
 EOF

@@ -3,15 +3,10 @@ From: Mark Harfouche <mark.harfouche@gmail.com>
 Date: Fri, 16 May 2026 00:00:00 -0400
 Subject: [PATCH] Restore system protobuf/grpc wiring for TF 2.21.0
 
-TF 2.21.0 dropped the system_build_file/system_link_files arguments
-from com_google_protobuf and com_github_grpc_grpc and moved its
-proto/grpc Bazel rule loads to the //bazel: subdirectory. Restore the
-system wiring and add thin shim rule files under third_party/systemlibs
-(protobuf is defined in python_init_rules.bzl, loaded from @xla, so its
-labels use the @// main-repo prefix). protobuf_python.bzl is linked as
-python/BUILD so @com_google_protobuf//python:proto_api resolves for
-pybind11_protobuf. The grpc cc_grpc_library stub also learns the
-plugin_flags argument used by tf_proto_library(use_grpc_namespace).
+Restore the system_build_file/system_link_files wiring for protobuf and
+grpc that TF 2.21.0 dropped, adding shim rule files under
+third_party/systemlibs (including protobuf_python.bzl as python/BUILD for
+pybind11_protobuf) and teaching the grpc stub the plugin_flags argument.
 ---
 diff --git a/tensorflow/workspace2.bzl b/tensorflow/workspace2.bzl
 index 94151996..244599bd 100644

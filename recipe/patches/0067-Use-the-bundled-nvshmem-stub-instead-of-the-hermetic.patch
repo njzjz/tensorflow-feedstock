@@ -3,11 +3,10 @@ From: Mark Harfouche <mark.harfouche@gmail.com>
 Date: Sun, 17 May 2026 22:22:44 -0400
 Subject: [PATCH] Use the bundled nvshmem stub instead of the hermetic redist
 
-TF 2.21.0's nvshmem_stub alias resolves to @nvidia_nvshmem when CUDA libs
-are force-included (override_include_cuda_libs=true). The hermetic
-@nvidia_nvshmem redistribution (NVSHMEM 3.2.5) ships no cuda13 archive,
-so the build aborts during repository fetch on CUDA 13. conda-forge does
-not package NVSHMEM, so always use the bundled dlopen stub (:nvshmem).
+The hermetic @nvidia_nvshmem redist (NVSHMEM 3.2.5) ships no cuda13
+archive, so the build aborts fetching it on CUDA 13. conda-forge does not
+package NVSHMEM, so always use the bundled dlopen stub (:nvshmem) instead
+of the @nvidia_nvshmem alias.
 ---
  third_party/xla/xla/tsl/cuda/BUILD.bazel | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

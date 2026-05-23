@@ -3,12 +3,10 @@ From: Mark Harfouche <mark.harfouche@gmail.com>
 Date: Mon, 18 May 2026 17:35:43 +0000
 Subject: [PATCH] XLA: use select_k stub to avoid nvcc 12.9 cicc crash
 
-nvcc 12.9's cicc device compiler segfaults (signal 11) compiling RAFT's
-heavily-templated select_k.cuh via xla/backends/gpu/runtime/select_k_exec_raft.cc.
-RAFT select-k is gated behind the experimental, default-off XLA flag
-xla_gpu_experimental_use_raft_select_k; the default GPU Top-K path is the
-separate topk CustomKernel. Point select_k_thunk at the existing
-select_k_exec_stub so the crashing translation unit is never compiled.
+nvcc 12.9's cicc segfaults compiling RAFT's select_k.cuh via
+select_k_exec_raft.cc. RAFT select-k is gated behind the experimental,
+default-off xla_gpu_experimental_use_raft_select_k flag, so point
+select_k_thunk at the existing select_k_exec_stub to skip that TU.
 ---
  third_party/xla/xla/backends/gpu/runtime/BUILD | 12 ++++++++----
  1 file changed, 8 insertions(+), 4 deletions(-)
