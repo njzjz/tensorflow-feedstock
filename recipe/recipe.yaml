@@ -110,6 +110,10 @@ source:
       # PlatformObjectRegistry: tolerate identical-key duplicate registrations
       # from the per-.so stream_executor registrars (keep the first)
       - patches/0075-PlatformObjectRegistry-tolerate-duplicate-registrati.patch
+      # OpKernel registry: skip exact-duplicate kernel registrations from the
+      # two TF .so's (e.g. _Send/_Recv) that otherwise abort GPU host<->device
+      # copies with "Multiple OpKernel registrations match ... same priority"
+      - patches/0077-OpKernel-registry-tolerate-duplicate-kernel-registra.patch
       # NB: the analogous abseil-flag duplicate-registration abort is handled
       # not by a patch but by the force-included tf_absl_flag_guard.h (see
       # build_common.sh), because systemized absl cannot be patched.
