@@ -1,3 +1,24 @@
+# Known limitation (upstream XLA bug, NOT a packaging/recipe issue): on CUDA 13
+# builds, XLA JIT (tf.function(jit_compile=True), or keras auto-JIT) crashes
+# emitting the Ampere TF32 tensor-core matmul:
+#   error: FloatAttr does not match expected type of the constant
+#   Operand is null ... mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32 ... <null operand!>
+#   -> Failed to emit LLVM IR
+# Eager and non-JIT graph GPU execution are unaffected. Workaround: disable TF32
+# (tf.config.experimental.enable_tensor_float_32_execution(False)); no
+# --xla_gpu_* flag is known to help.
+#
+# Attribution: XLA's GPU LLVM emitter constructs a malformed/null-operand
+# inline-asm mma.sync call that fails at LLVM IR emission (before ptxas), so it
+# is compiler-side XLA codegen, not ptxas/packaging. CUDA 13 / LLVM 18 are the
+# exposing conditions. Evidence:
+#  * JAX jax-ml/jax#20154 ("Pallas bug: Operand is null") reproduces the exact
+#    signature (same mma.sync...f32.tf32.tf32.f32 asm, same Operand is null /
+#    <null operand!> -> Failed to emit LLVM IR) -- closed as unreproducible
+#    (2024, CUDA 12.2, A100), with no root cause and no fix.
+#  * libxsmm/tpp-mlir#870 independently shows "FloatAttr does not match expected
+#    type of the constant" comes from tensor-core MLIR->NVVM lowering emitting a
+#    type-mismatched constant into the MMA path.
 schema_version: 1
 
 context:
