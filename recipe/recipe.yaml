@@ -1,38 +1,3 @@
-# Previously-documented limitation, now suspected to be a recipe/toolchain
-# issue rather than an upstream XLA bug -- see conda_build_config.yaml for the
-# full writeup. On CUDA 13 builds, XLA JIT (tf.function(jit_compile=True), or
-# keras auto-JIT) crashes emitting the Ampere TF32 tensor-core matmul:
-#   error: FloatAttr does not match expected type of the constant
-#   Operand is null ... mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32 ... <null operand!>
-#   -> Failed to emit LLVM IR
-# Eager and non-JIT graph GPU execution are unaffected. Workaround: disable TF32
-# (tf.config.experimental.enable_tensor_float_32_execution(False)); no
-# --xla_gpu_* flag is known to help.
-#
-# This has the same signature as a separately root-caused bug hit on a Turing
-# (sm_75) GPU: "'llvm.mlir.constant' op attribute and type have different float
-# semantics", reproduced identically on both CUDA 12.9 and CUDA 13.0 builds, in
-# both XLA's fusion autotuner and TF's independent kernel_gen JIT fallback (a
-# bare eager tf.nn.relu, no XLA involved), and absent when running an official
-# pip tensorflow wheel on the same GPU/driver. That pointed at this feedstock
-# building TF 2.21.0 against conda-forge clang 18, ~4 LLVM major versions
-# behind the LLVM commit TF 2.21.0 actually pins upstream -- an MLIR ABI/
-# semantics mismatch, not a genuine XLA logic bug. The compiler pin has been
-# bumped to clang 22 (conda_build_config.yaml) to match; this TF32/mma.sync
-# limitation should be re-tested against a build with the new pin before
-# trusting the "upstream, unfixable" framing below any further.
-#
-# Original attribution (kept for context, now suspect): XLA's GPU LLVM emitter
-# constructs a malformed/null-operand inline-asm mma.sync call that fails at
-# LLVM IR emission (before ptxas). CUDA 13 / LLVM 18 were the exposing
-# conditions. Evidence:
-#  * JAX jax-ml/jax#20154 ("Pallas bug: Operand is null") reproduces the exact
-#    signature (same mma.sync...f32.tf32.tf32.f32 asm, same Operand is null /
-#    <null operand!> -> Failed to emit LLVM IR) -- closed as unreproducible
-#    (2024, CUDA 12.2, A100), with no root cause and no fix.
-#  * libxsmm/tpp-mlir#870 independently shows "FloatAttr does not match expected
-#    type of the constant" comes from tensor-core MLIR->NVVM lowering emitting a
-#    type-mismatched constant into the MMA path.
 schema_version: 1
 
 context:

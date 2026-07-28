@@ -7,20 +7,18 @@
 # pins LLVM commit 909041e4802c4b9a2223ca04099f35bf1dbbd460 (2026-01-27), which
 # sits essentially at the llvmorg-22.1.0 branch point (released 2026-02-24) --
 # roughly four LLVM major versions and ~22 months past llvmorg-18.1.0
-# (2024-03-06). Building against clang 18 compiles fine but is an XLA/MLIR ABI
-# and semantics mismatch at runtime: it reproduced as a hard crash bringing up
-# a Turing (sm_75) GPU on both CUDA 12.9 and CUDA 13.0 builds --
-#   error: 'llvm.mlir.constant' op attribute and type have different float
-#   semantics
-# in *any* JIT-compiled kernel path (XLA's GpuCompiler NativeEmitter fusion
-# autotuner candidates, and independently TF's kernel_gen JIT fallback for a
-# bare eager tf.nn.relu with no XLA/tf.function involved at all) -- and was
-# absent when the same script ran against an official pip tensorflow wheel
-# (built with TF's own hermetic, correctly-pinned LLVM) on the same GPU/driver.
-# This is also the most likely explanation for the "FloatAttr does not match
-# expected type of the constant" TF32/mma.sync limitation documented at the
-# top of recipe.yaml -- same symptom family, same suspected cause -- pending
-# re-verification now that the pin has moved.
+# (2024-03-06). clang 22 keeps the compiler in the same LLVM era as the
+# MLIR/XLA sources it builds and is what enables clang-as-CUDA-compiler for
+# CUDA 12.9/13.0 (see build_common.sh: nvcc's EDG host frontend cannot parse
+# clang-22-era absl/protobuf/clang-resource headers, and clang 18 could not
+# compile CUDA 13 device code).
+# Historical note: this bump was first motivated by a runtime crash in every
+# GPU JIT path ("'llvm.mlir.constant' op attribute and type have different
+# float semantics"), but that crash was ultimately root-caused to duplicated
+# MLIR across the wheel's shared objects and fixed by the
+# libtensorflow_framework symlink in build_pkg.sh (see the comment there);
+# the clang 22 pin is kept as correct upstream alignment, not as that
+# crash's fix.
 #
 # c_compiler_version / cxx_compiler_version / c_stdlib_version are in the
 # conda-forge `unix` zip_keys group; under CF_CUDA_ENABLED the cuda migrator

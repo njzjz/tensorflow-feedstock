@@ -27,6 +27,16 @@ sed -i.bak "s/cp312/cp${PY_VER/./}/g" ${SP_DIR}/tensorflow-${PKG_VERSION}.dist-i
 # an sm_75 GPU: swapping this one file fixes eager relu, XLA JIT, and
 # model.fit.
 #
+# Related, UNVERIFIED (needs an sm_80+ GPU): the Ampere-only TF32/mma.sync
+# XLA JIT failure previously documented as a known limitation ("FloatAttr
+# does not match expected type of the constant ... mma.sync...f32.tf32 ...
+# <null operand!> -> Failed to emit LLVM IR"; workaround:
+# tf.config.experimental.enable_tensor_float_32_execution(False)) shares
+# this bug family's FloatAttr/float-semantics signature and may be fixed by
+# this same change. Re-test on Ampere+ before treating it as an upstream
+# XLA bug -- though jax-ml/jax#20154 and libxsmm/tpp-mlir#870 show the same
+# signature upstream, so a genuine XLA component is also possible.
+#
 # Linux ONLY. Do NOT swap the framework dylib on macOS: Mach-O two-level
 # namespace binds every undefined symbol to a specific provider image at
 # link time, so (a) the ELF preemption bug this fixes cannot occur there,
