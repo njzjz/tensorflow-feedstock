@@ -55,12 +55,14 @@ c_stdlib_version:              # [(linux and (x86_64 or aarch64)) and os.environ
 
 # Compiler pinnings deviate from the global migrator to honor the local
 # conda_build_config: tensorflow-feedstock builds with clang (TF/XLA require
-# it), so pin clang 18 for the CUDA variant rather than the migrator's gcc-era
-# version. Same approach as jaxlib-feedstock (use_local migrator edit).
+# it), so pin clang 22 for the CUDA variant rather than the migrator's gcc-era
+# version. 22, not 18: TF 2.21.0's actual LLVM pin sits at the llvmorg-22.1.0
+# branch point, ~4 major versions past 18 -- see conda_build_config.yaml.
+# Same approach as jaxlib-feedstock (use_local migrator edit).
 c_compiler_version:            # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
-  - 18                         # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
+  - 22                         # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
 cxx_compiler_version:          # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
-  - 18                         # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
+  - 22                         # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
 
 fortran_compiler_version:      # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
-  - 18                         # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]
+  - 22                         # [(linux and (x86_64 or aarch64)) and os.environ.get("CF_CUDA_ENABLED", "False") == "True"]

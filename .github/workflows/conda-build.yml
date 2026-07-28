@@ -24,7 +24,7 @@ jobs:
         include:
           - CONFIG: linux_64_cuda_compiler_version12.9microarch_level1
             CONFIG_SHORT: linux_64_cuda_compiler_version12.9microa_h28a6e8b1
-            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma9
+            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma10
             STORE_BUILD_ARTIFACTS: True
             UPLOAD_PACKAGES: True
             build_workspace_dir: build_artifacts
@@ -37,7 +37,7 @@ jobs:
             tools_install_dir: ~/miniforge3
           - CONFIG: linux_64_cuda_compiler_version12.9microarch_level3
             CONFIG_SHORT: linux_64_cuda_compiler_version12.9microa_h764a83b2
-            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma9
+            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma10
             STORE_BUILD_ARTIFACTS: True
             UPLOAD_PACKAGES: True
             build_workspace_dir: build_artifacts
@@ -50,7 +50,7 @@ jobs:
             tools_install_dir: ~/miniforge3
           - CONFIG: linux_64_cuda_compiler_version13.0microarch_level1
             CONFIG_SHORT: linux_64_cuda_compiler_version13.0microa_h6bde013c
-            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma9
+            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma10
             STORE_BUILD_ARTIFACTS: True
             UPLOAD_PACKAGES: True
             build_workspace_dir: build_artifacts
@@ -63,7 +63,7 @@ jobs:
             tools_install_dir: ~/miniforge3
           - CONFIG: linux_64_cuda_compiler_version13.0microarch_level3
             CONFIG_SHORT: linux_64_cuda_compiler_version13.0microa_h1eaea9c3
-            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma9
+            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma10
             STORE_BUILD_ARTIFACTS: True
             UPLOAD_PACKAGES: True
             build_workspace_dir: build_artifacts
@@ -76,7 +76,7 @@ jobs:
             tools_install_dir: ~/miniforge3
           - CONFIG: linux_64_cuda_compiler_versionNonemicroarch_level1
             CONFIG_SHORT: linux_64_cuda_compiler_versionNonemicroa_h0e112a19
-            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma9
+            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma10
             STORE_BUILD_ARTIFACTS: True
             UPLOAD_PACKAGES: True
             build_workspace_dir: build_artifacts
@@ -89,7 +89,7 @@ jobs:
             tools_install_dir: ~/miniforge3
           - CONFIG: linux_64_cuda_compiler_versionNonemicroarch_level3
             CONFIG_SHORT: linux_64_cuda_compiler_versionNonemicroa_hb1134425
-            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma9
+            DOCKER_IMAGE: quay.io/condaforge/linux-anvil-x86_64:alma10
             STORE_BUILD_ARTIFACTS: True
             UPLOAD_PACKAGES: True
             build_workspace_dir: build_artifacts

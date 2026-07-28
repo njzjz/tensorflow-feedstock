@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: pb01ka <gaganpb08singh@gmail.com>
+Date: Tue, 14 Jul 2026 00:00:00 +0000
+Subject: [PATCH] Bump vendored Highway 1.3.0 -> 1.4.0 for clang 22 evex512
+ compat
+
+TF 2.21.0 pins com_google_highway at 1.3.0. Highway 1.3.0's
+hwy/ops/x86_512-inl.h does not account for clang's AVX10-driven
+evex512 target-feature split, so any TU that includes it fails to
+build under clang >= 22 with e.g.:
+
+  error: always_inline function '_mm512_div_ps' requires target
+  feature 'avx512f', but would be inlined into function 'operator/'
+  that is compiled without support for 'avx512f'
+  error: AVX vector return of type '__m512' (vector of 16 'float'
+  values) without 'avx512f' enabled changes the ABI
+
+This is a known, already-fixed upstream issue (google/highway#1864):
+confirmed broken on 1.3.0, confirmed fixed on 1.4.0, with no source
+change needed on our side beyond re-pointing the pin. sha256 verified
+against the GitHub release tarball for tag 1.4.0.
+
+TF's own third_party/com_google_highway/build.patch (applied on top of
+whichever Highway tarball is fetched, to move highway.h/foreach_target.h
+from textual_hdrs into hdrs with an include_prefix) is line-number-exact
+against 1.3.0's BUILD file and does not apply against 1.4.0's, whose BUILD
+file shifted around it. Ported it to the same hunks against 1.4.0's
+actual BUILD content (same transformation, verified by hand against the
+1.4.0 release tarball); no functional change from the original intent.
+---
+--- a/third_party/com_google_highway/workspace.bzl
++++ b/third_party/com_google_highway/workspace.bzl
+@@ -5,8 +5,8 @@ load("//third_party:repo.bzl", "tf_http_archive", "tf_mirror_urls")
+ def repo():
+     tf_http_archive(
+         name = "com_google_highway",
+-        strip_prefix = "highway-1.3.0",
+-        sha256 = "07b3c1ba2c1096878a85a31a5b9b3757427af963b1141ca904db2f9f4afe0bc2",
+-        urls = tf_mirror_urls("https://github.com/google/highway/archive/refs/tags/1.3.0.tar.gz"),
++        strip_prefix = "highway-1.4.0",
++        sha256 = "e72241ac9524bb653ae52ced768b508045d4438726a303f10181a38f764a453c",
++        urls = tf_mirror_urls("https://github.com/google/highway/archive/refs/tags/1.4.0.tar.gz"),
+         patch_file = ["//third_party/com_google_highway:build.patch"],
+     )
+--- a/third_party/com_google_highway/build.patch
++++ b/third_party/com_google_highway/build.patch
+@@ -1,13 +1,22 @@
+-diff --git a/BUILD b/BUILD
+-index ef49b2d..1710abc 100644
+---- a/BUILD
+-+++ b/BUILD
+-@@ -157,1 +155,5 @@ cc_library(
+-+        "hwy/highway.h",  # public
+-+        "hwy/foreach_target.h",  # public
+-     ],
+-+    include_prefix = "third_party/highway",
+-+    includes = ["."],
+-@@ -169,2 +173,0 @@ cc_library(
+--        "hwy/highway.h",  # public
+--        "hwy/foreach_target.h",  # public
++diff --git a/BUILD b/BUILD
++--- a/BUILD
+++++ b/BUILD
++@@ -155,7 +155,11 @@
++         "hwy/detect_compiler_arch.h",  # private
++         "hwy/print.h",
++         "hwy/x86_cpuid.h",
+++        "hwy/highway.h",  # public
+++        "hwy/foreach_target.h",  # public
++     ],
+++    include_prefix = "third_party/highway",
+++    includes = ["."],
++     compatible_with = [],
++     copts = COPTS,
++     defines = DEFINES,
++@@ -168,6 +172,4 @@
++         "hwy/per_target.cc",
++         # End of list
++-        "hwy/highway.h",  # public
++-        "hwy/foreach_target.h",  # public
++         "hwy/per_target.h",  # public
++         "hwy/print-inl.h",  # public

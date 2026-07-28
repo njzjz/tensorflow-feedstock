@@ -11,6 +11,29 @@ ${PYTHON} -m pip install --no-deps $SRC_DIR/tensorflow_pkg/*-cp${PY_VER/./}-*.wh
 
 sed -i.bak "s/cp312/cp${PY_VER/./}/g" ${SP_DIR}/tensorflow-${PKG_VERSION}.dist-info/WHEEL
 
+# The framework symlink on linux is not deduplication -- it is a correctness
+# fix. The wheel's pywrap-built libtensorflow_framework is linked WITHOUT
+# tf_framework_version_script.lds, so it dynamically exports its embedded
+# MLIR subset (~17k unversioned _ZN4mlir* symbols). Loaded before
+# libtensorflow_cc, those exports preempt cc's overlapping (version-script-
+# leaked) MLIR exports, splitting cc's MLIR/LLVM between two copies of
+# LLVM statics. MLIR compares fltSemantics/TypeIDs by pointer identity, so
+# every JIT path then dies with "'llvm.mlir.constant' op attribute and type
+# have different float semantics" (XLA autotuner, kernel_gen, even eager
+# tf.nn.relu on GPU). The pass-2 lib/ framework IS version-scripted (zero
+# MLIR exports); linking the wheel to it keeps each library's MLIR
+# self-contained -- the same isolation topology as upstream's pip wheel
+# (whose compiler-carrying pywrap exports no MLIR/LLVM at all). Verified on
+# an sm_75 GPU: swapping this one file fixes eager relu, XLA JIT, and
+# model.fit.
+#
+# Linux ONLY. Do NOT swap the framework dylib on macOS: Mach-O two-level
+# namespace binds every undefined symbol to a specific provider image at
+# link time, so (a) the ELF preemption bug this fixes cannot occur there,
+# and (b) lib_pywrap_tensorflow_common.dylib has mlir references recorded
+# against the pywrap-built framework's exports -- pointing it at the
+# pass-2 framework (which hides mlir) aborts import with
+# "Symbol not found: __ZN4mlir14RewritePattern6anchorEv".
 if [[ "$target_platform" == "osx-"* ]]; then
   rm -rf ${SP_DIR}/tensorflow/libtensorflow.2.dylib
   rm -rf ${SP_DIR}/tensorflow/libtensorflow_cc.2.dylib
@@ -19,8 +42,10 @@ if [[ "$target_platform" == "osx-"* ]]; then
 else
   rm -rf ${SP_DIR}/tensorflow/libtensorflow.so.2
   rm -rf ${SP_DIR}/tensorflow/libtensorflow_cc.so.2
+  rm -rf ${SP_DIR}/tensorflow/libtensorflow_framework.so.2
   ln -sf ${PREFIX}/lib/libtensorflow.so.2 ${SP_DIR}/tensorflow/libtensorflow.so.2
   ln -sf ${PREFIX}/lib/libtensorflow_cc.so.2 ${SP_DIR}/tensorflow/libtensorflow_cc.so.2
+  ln -sf ${PREFIX}/lib/libtensorflow_framework.so.2 ${SP_DIR}/tensorflow/libtensorflow_framework.so.2
 fi
 
 # The tensorboard package has the proper entrypoint

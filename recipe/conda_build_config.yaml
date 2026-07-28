@@ -3,6 +3,25 @@
 # clang, matching TensorFlow upstream. clangxx_linux-64 still targets libstdc++
 # so the conda ABI is unchanged.
 #
+# Pin to 22, not 18: TF 2.21.0's third_party/xla/third_party/llvm/workspace.bzl
+# pins LLVM commit 909041e4802c4b9a2223ca04099f35bf1dbbd460 (2026-01-27), which
+# sits essentially at the llvmorg-22.1.0 branch point (released 2026-02-24) --
+# roughly four LLVM major versions and ~22 months past llvmorg-18.1.0
+# (2024-03-06). Building against clang 18 compiles fine but is an XLA/MLIR ABI
+# and semantics mismatch at runtime: it reproduced as a hard crash bringing up
+# a Turing (sm_75) GPU on both CUDA 12.9 and CUDA 13.0 builds --
+#   error: 'llvm.mlir.constant' op attribute and type have different float
+#   semantics
+# in *any* JIT-compiled kernel path (XLA's GpuCompiler NativeEmitter fusion
+# autotuner candidates, and independently TF's kernel_gen JIT fallback for a
+# bare eager tf.nn.relu with no XLA/tf.function involved at all) -- and was
+# absent when the same script ran against an official pip tensorflow wheel
+# (built with TF's own hermetic, correctly-pinned LLVM) on the same GPU/driver.
+# This is also the most likely explanation for the "FloatAttr does not match
+# expected type of the constant" TF32/mma.sync limitation documented at the
+# top of recipe.yaml -- same symptom family, same suspected cause -- pending
+# re-verification now that the pin has moved.
+#
 # c_compiler_version / cxx_compiler_version / c_stdlib_version are in the
 # conda-forge `unix` zip_keys group; under CF_CUDA_ENABLED the cuda migrator
 # adds a second entry (the CUDA variant), so every overridden linux key must
@@ -17,11 +36,11 @@ cxx_compiler:                   # [linux]
   - clangxx                     # [linux]
   - clangxx                     # [linux]
 c_compiler_version:             # [linux]
-  - 18                          # [linux]
-  - 18                          # [linux]
+  - 22                          # [linux]
+  - 22                          # [linux]
 cxx_compiler_version:           # [linux]
-  - 18                          # [linux]
-  - 18                          # [linux]
+  - 22                          # [linux]
+  - 22                          # [linux]
 c_stdlib_version:               # [linux]
   - 2.17                        # [linux]
   - 2.17                        # [linux]

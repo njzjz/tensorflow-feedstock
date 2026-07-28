@@ -150,16 +150,37 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
     # makes every output unconditionally NEED libnvidia-ml.so.1, which ships
     # only with the driver (no conda-forge package), breaking `import
     # tensorflow`.
-    # CUDA device code is built by nvcc with clang 18 as host compiler
-    # (TF_NVCC_CLANG); clang 18 alone cannot compile CUDA 13 device code.
-    # configure.py reads GCC_HOST_COMPILER_PATH on the TF_CUDA_CLANG=0 path;
-    # point it at clang (it only checks the path exists).
-    export TF_CUDA_CLANG=0
-    export TF_NVCC_CLANG=1
+    # clang compiles BOTH host and device CUDA code (TF_CUDA_CLANG=1,
+    # --config=cuda_clang below). The previous nvcc-device/clang-host split
+    # (TF_NVCC_CLANG) broke at clang 22: nvcc's EDG host frontend cannot parse
+    # clang-22-era headers (absl nullability-on-classes and
+    # __builtin_is_cpp_trivially_relocatable, protobuf __is_bitwise_cloneable,
+    # clang 22's own xmmintrin.h __builtin_elementwise_sqrt), and unlike the
+    # clang 18 this recipe used before, clang 22 fully supports CUDA 12.9/13.0
+    # device compilation (max PTX 9.0), so single-compiler clang is now viable
+    # -- and is upstream's primary supported CUDA build path.
+    # configure.py on the TF_CUDA_CLANG=1 path reads CLANG_CUDA_COMPILER_PATH
+    # (it only checks the path exists). GCC_HOST_COMPILER_PATH is unused on
+    # this path; still exported to keep a revert to TF_NVCC_CLANG one-line.
+    export TF_CUDA_CLANG=1
     export TF_NEED_CLANG=1
-    export CLANG_CUDA_COMPILER_PATH="${BUILD_PREFIX}/bin/clang"
-    export CLANG_COMPILER_PATH="${BUILD_PREFIX}/bin/clang"
-    export GCC_HOST_COMPILER_PATH="${BUILD_PREFIX}/bin/clang"
+    # conda-forge's clang >= 19 compiler stack changed packaging:
+    # clang_impl_linux-64 22 depends on the versioned `clang-22` package
+    # (bin/clang-22 only); the unversioned bin/clang symlink lives in the
+    # separate `clang` package, which is no longer pulled into the build env
+    # (clang_impl_linux-64 18 depended on `clang` directly). Resolve whichever
+    # raw clang driver actually exists.
+    CLANG_BIN="${BUILD_PREFIX}/bin/clang"
+    if [[ ! -x "${CLANG_BIN}" ]]; then
+        CLANG_BIN="${BUILD_PREFIX}/bin/clang-${c_compiler_version%%.*}"
+    fi
+    if [[ ! -x "${CLANG_BIN}" ]]; then
+        echo "ERROR: no clang driver found in ${BUILD_PREFIX}/bin (tried clang, clang-${c_compiler_version%%.*})" >&2
+        exit 1
+    fi
+    export CLANG_CUDA_COMPILER_PATH="${CLANG_BIN}"
+    export CLANG_COMPILER_PATH="${CLANG_BIN}"
+    export GCC_HOST_COMPILER_PATH="${CLANG_BIN}"
     # nvcc / cicc / ptxas live under nvvm/bin in the conda cuda-nvcc package.
     export PATH="${PATH}:${BUILD_PREFIX}/nvvm/bin"
 
@@ -184,10 +205,13 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
     export LDFLAGS="${LDFLAGS//-Wl,-z,now/-Wl,-z,lazy}"
 
     if [[ "${cuda_compiler_version}" == 12* || "${cuda_compiler_version}" == 13* ]]; then
-        # clang 18 (the host compiler) only understands compute capabilities
-        # up to sm_90; the Blackwell archs sm_100/sm_120 would make clang error
-        # ("unsupported CUDA gpu architecture"). Cap the list at sm_90 until a
-        # newer clang is in use.
+        # As of clang 18 the host compiler only understood compute
+        # capabilities up to sm_90; the Blackwell archs sm_100/sm_120 would
+        # make clang error ("unsupported CUDA gpu architecture"). Cap the list
+        # at sm_90 for now. The compiler pin has since moved to clang 22
+        # (conda_build_config.yaml) to match TF 2.21.0's actual LLVM version --
+        # worth re-checking whether sm_100/sm_120 can now be added, but that is
+        # unverified so the cap is left in place here.
         if [[ "${cuda_compiler_version}" == 13* ]]; then
             # CUDA 13 dropped support for compute capabilities below sm_75
             export HERMETIC_CUDA_COMPUTE_CAPABILITIES=sm_75,sm_80,sm_86,sm_89,sm_90,compute_90
@@ -362,6 +386,18 @@ cat >> .bazelrc <<EOF
 build --config=clang_local
 build --logging=6
 build --verbose_failures
+# Upstream builds with -c opt (stock .bazelrc line ~93), whose STANDARD
+# toolchains define NDEBUG -- but that injection is a toolchain feature, and
+# the conda crosstools used here (bazel-toolchain; TF's CUDA crosstool
+# wrapper) do not reliably provide it, leaving debug asserts live in release
+# binaries (pip wheels contain none of them). On macOS this is fatal at
+# runtime: tsl::down_cast's !NDEBUG dynamic_cast self-check aborts
+# ("Assertion failed: f == nullptr || dynamic_cast<To>(f) != nullptr,
+# casts.h") because RTTI type_info is duplicated across the two-level-
+# namespace dylib pair, so cross-image dynamic_cast returns null for valid
+# objects; ELF coalesces the duplicates so linux merely pays the assert
+# overhead. Define NDEBUG explicitly to match upstream release semantics.
+build --copt=-DNDEBUG --host_copt=-DNDEBUG
 build --define=PREFIX=${PREFIX}
 build --define=PROTOBUF_INCLUDE_PATH=${PREFIX}/include
 build --cpu=${CC_CPU}
@@ -384,9 +420,9 @@ build --host_per_file_copt=.*(common_runtime/next_pluggable_device/flags|common_
 EOF
 
 # Per-variant crosstool: the CPU build uses the conda crosstool directly; the
-# CUDA build routes through TF's CUDA crosstool, whose nvcc wrapper dispatches
-# device files to nvcc 13 and everything else to conda clang 18 (a blanket
-# conda crosstool would force clang onto the device files). Mirrors config:rocm.
+# CUDA build routes through TF's CUDA crosstool, which (with
+# --config=cuda_clang's cuda_compiler=clang) drives conda clang for host and
+# device files alike, resolving CUDA bits via the local_config_cuda repos.
 if [[ "${cuda_compiler_version}" == "None" ]]; then
   cat >> .bazelrc <<EOF
 build --crosstool_top=//bazel_toolchain:toolchain
@@ -428,10 +464,18 @@ build --host_cxxopt=-fclang-abi-compat=17
 EOF
 fi
 
-# cuda_nvcc: nvcc builds device code, clang stays the host compiler.
+# cuda_clang: clang builds both host and device code (see TF_CUDA_CLANG
+# comment above). Requires lld (recipe.yaml adds it for CUDA variants) since
+# the config links with -fuse-ld=lld.
 if [[ "${cuda_compiler_version}" != "None" ]]; then
   cat >> .bazelrc <<EOF
-build --config=cuda_nvcc
+build --config=cuda_clang
+# --config=cuda_clang hardcodes --repo_env=HERMETIC_CUDA_COMPUTE_CAPABILITIES
+# ="sm_60,sm_70,sm_80,sm_89,compute_90": no sm_75/sm_86, and sm_60/sm_70 are
+# unsupported by CUDA 13. Re-assert the variant's list; these recipe lines
+# append after .bazelrc's try-imports, so this later repo_env wins over the
+# config expansion.
+build --repo_env=HERMETIC_CUDA_COMPUTE_CAPABILITIES=${HERMETIC_CUDA_COMPUTE_CAPABILITIES}
 # cuda_wheel sets include_cuda_libs=false so CUDA libs are dlopen'd lazily
 # rather than hard-NEEDED; without it libtensorflow_framework.so.2 would need
 # libcuda.so.1 at import time, which the conda test envs don't ship.
