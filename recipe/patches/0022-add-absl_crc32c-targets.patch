@@ -1,19 +1,18 @@
-From 1d94d4f352debab84e477765e739c644e77951d9 Mon Sep 17 00:00:00 2001
+From 656dd4b2fbcea1b88170148a8e7bc751595c146d Mon Sep 17 00:00:00 2001
 From: "H. Vetinari" <h.vetinari@gmx.com>
 Date: Mon, 13 May 2024 09:41:09 +1100
-Subject: [PATCH 22/44] add absl_crc32c targets
+Subject: [PATCH] add absl_crc32c targets
 
 ---
- third_party/absl/system.absl.crc.BUILD | 70 ++++++++++++++++++++++++++
- third_party/absl/workspace.bzl         |  1 +
- 2 files changed, 71 insertions(+)
- create mode 100644 third_party/absl/system.absl.crc.BUILD
+ .../third_party/absl/system.absl.crc.BUILD    | 70 +++++++++++++++++++
+ 1 file changed, 70 insertions(+)
+ create mode 100644 third_party/xla/third_party/absl/system.absl.crc.BUILD
 
-diff --git a/third_party/absl/system.absl.crc.BUILD b/third_party/absl/system.absl.crc.BUILD
+diff --git a/third_party/xla/third_party/absl/system.absl.crc.BUILD b/third_party/xla/third_party/absl/system.absl.crc.BUILD
 new file mode 100644
-index 00000000000..487c36ff45b
+index 00000000..487c36ff
 --- /dev/null
-+++ b/third_party/absl/system.absl.crc.BUILD
++++ b/third_party/xla/third_party/absl/system.absl.crc.BUILD
 @@ -0,0 +1,70 @@
 +load("@rules_cc//cc:defs.bzl", "cc_library")
 +
@@ -85,15 +84,6 @@ index 00000000000..487c36ff45b
 +        "//absl/base:config",
 +    ],
 +)
-diff --git a/third_party/absl/workspace.bzl b/third_party/absl/workspace.bzl
-index b5197f9304b..0bb3fbbf074 100644
---- a/third_party/absl/workspace.bzl
-+++ b/third_party/absl/workspace.bzl
-@@ -14,6 +14,7 @@ def repo():
-     SYS_DIRS = [
-         "algorithm",
-         "base",
-+        "crc",
-         "cleanup",
-         "container",
-         "debugging",
+-- 
+2.43.0
+

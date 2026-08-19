@@ -1,23 +1,14 @@
-From 2d39b35a19ede081ccc78120df16c845bcba622c Mon Sep 17 00:00:00 2001
+From a86d4c067439da9a443bf71078f24f0496ce6f07 Mon Sep 17 00:00:00 2001
 From: Isuru Fernando <ifernando@openteams.com>
 Date: Mon, 13 Oct 2025 19:52:15 +0000
-Subject: [PATCH 41/44] Disable profiler
+Subject: [PATCH] Disable profiler
 
-Enabling the profiler results in
-
-  E0000 00:00:1755006819.633883 1325783 descriptor_database.cc:678] File already exists in database: tensorflow/core/example/feature.proto
-  F0000 00:00:1755006819.633924 1325783 descriptor.cc:2519] Check failed: GeneratedDatabase()->Add(encoded_file_descriptor, size)
-
-isuruf and xhochy spent lots of time figuring out bazel and could
-not arrive at a solution.
-
-See https://github.com/conda-forge/tensorflow-feedstock/pull/437#issuecomment-3391979920
 ---
  tensorflow/python/profiler/profiler_client.py | 3 ++-
  1 file changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/tensorflow/python/profiler/profiler_client.py b/tensorflow/python/profiler/profiler_client.py
-index ad931ce6d69..3fec5ea1cd5 100644
+index ad931ce6..3fec5ea1 100644
 --- a/tensorflow/python/profiler/profiler_client.py
 +++ b/tensorflow/python/profiler/profiler_client.py
 @@ -15,7 +15,6 @@
@@ -44,3 +35,6 @@ index ad931ce6d69..3fec5ea1cd5 100644
    return _pywrap_profiler_plugin.monitor(
        _strip_prefix(service_addr, _GRPC_PREFIX), duration_ms, level, True
    )
+-- 
+2.43.0
+

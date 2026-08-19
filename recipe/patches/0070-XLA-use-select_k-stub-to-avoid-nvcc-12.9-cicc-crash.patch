@@ -1,0 +1,39 @@
+From 94b23899c62fda2084d44b151043cd9df2ef979d Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Mon, 18 May 2026 17:35:43 +0000
+Subject: [PATCH] XLA: use select_k stub to avoid nvcc 12.9 cicc crash
+
+nvcc 12.9's cicc segfaults compiling RAFT's select_k.cuh via
+select_k_exec_raft.cc. RAFT select-k is gated behind the experimental,
+default-off xla_gpu_experimental_use_raft_select_k flag, so point
+select_k_thunk at the existing select_k_exec_stub to skip that TU.
+---
+ third_party/xla/xla/backends/gpu/runtime/BUILD | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/third_party/xla/xla/backends/gpu/runtime/BUILD b/third_party/xla/xla/backends/gpu/runtime/BUILD
+index 23faffd4..0ee21e2c 100644
+--- a/third_party/xla/xla/backends/gpu/runtime/BUILD
++++ b/third_party/xla/xla/backends/gpu/runtime/BUILD
+@@ -1482,10 +1482,14 @@ cc_library(
+         "@com_google_absl//absl/strings",
+         "@com_google_absl//absl/types:span",
+         "@tsl//tsl/platform:statusor",
+-    ] + if_cuda_is_configured(
+-        [":select_k_exec_raft"],
+-        no_cuda = [":select_k_exec_stub"],
+-    ),
++    ] + [
++        # conda-forge: nvcc 12.9 cicc segfaults (signal 11) compiling RAFT's
++        # heavily-templated select_k.cuh. RAFT select-k is gated behind the
++        # experimental, default-off flag xla_gpu_experimental_use_raft_select_k,
++        # so the stub leaves the default GPU Top-K path (topk CustomKernel)
++        # unchanged. See xla/service/gpu/thunk_emitter.cc.
++        ":select_k_exec_stub",
++    ],
+ )
+ 
+ xla_cc_test(
+-- 
+2.54.0
+

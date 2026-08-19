@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Thu, 15 May 2026 00:00:00 -0400
+Subject: [PATCH] Restore the combined libtensorflow lib_package target
+
+TF 2.21.0 removed the aggregate //tensorflow/tools/lib_package:
+libtensorflow pkg_tar target (which produces libtensorflow.tar.gz)
+in favour of the individual component tars. The conda-forge feedstock
+build still consumes the combined archive; restore the target.
+---
+diff --git a/tensorflow/tools/lib_package/BUILD b/tensorflow/tools/lib_package/BUILD
+index c648e936..7fdb2e45 100644
+--- a/tensorflow/tools/lib_package/BUILD
++++ b/tensorflow/tools/lib_package/BUILD
+@@ -103,6 +103,21 @@ pkg_tar(
+     tags = ["manual"],
+ )
+ 
++# The combined libtensorflow C-library archive (libtensorflow.tar.gz). TF 2.21.0
++# dropped this aggregate target in favour of the individual component tars;
++# the conda-forge feedstock still consumes the combined archive.
++pkg_tar(
++    name = "libtensorflow",
++    extension = "tar.gz",
++    tags = ["manual"],
++    deps = [
++        ":cheaders",
++        ":clib",
++        ":clicenses",
++        ":eager_cheaders",
++    ],
++)
++
+ genrule(
+     name = "clicenses_generate",
+     srcs = [

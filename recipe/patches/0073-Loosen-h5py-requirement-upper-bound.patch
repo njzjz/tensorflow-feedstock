@@ -1,0 +1,20 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Tue, 20 May 2026 22:00:00 -0400
+Subject: [PATCH] Loosen h5py requirement upper bound
+
+TF 2.21.0 pins h5py < 3.15.0, but conda-forge ships h5py 3.16.0+. h5py
+is API-stable enough that the upper bound is over-restrictive; removing
+it lets the conda-forge package pass pip check.
+---
+--- a/tensorflow/tools/pip_package/setup.py.tpl
++++ b/tensorflow/tools/pip_package/setup.py.tpl
+@@ -126,7 +126,7 @@
+     'keras >= 3.12.0',
+     'numpy >= 1.26.0',
+     # Starting with 3.15, only MacOS 14 and 15 are supported.
+-    'h5py >= 3.11.0, < 3.15.0',
++    'h5py >= 3.11.0',
+     'ml_dtypes >= 0.5.1, < 1.0.0',
+ ]
+ 

@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Fri, 16 May 2026 00:00:00 -0400
+Subject: [PATCH] Make cc_proto_library shim use the modern native rule
+
+Point the cc_proto_library systemlib shim at Bazel 7's native rule so it
+accepts the modern deps=[proto_library] convention used by TF 2.21.0's
+tf_proto_library and vendored deps like riegeli; system libprotobuf
+supplies the runtime.
+---
+diff --git a/third_party/systemlibs/protobuf.bazel.cc_proto_library.bzl b/third_party/systemlibs/protobuf.bazel.cc_proto_library.bzl
+index c428ba90..53d248c5 100644
+--- a/third_party/systemlibs/protobuf.bazel.cc_proto_library.bzl
++++ b/third_party/systemlibs/protobuf.bazel.cc_proto_library.bzl
+@@ -1,5 +1,9 @@
+-"""Shim so @com_google_protobuf//bazel:cc_proto_library.bzl resolves for system protobuf."""
++"""cc_proto_library shim for a systemized protobuf.
+ 
+-load("@com_google_protobuf//:protobuf.bzl", _cc_proto_library = "cc_proto_library")
++TF 2.21.0 and vendored deps (e.g. riegeli) call cc_proto_library with the
++modern convention deps=[<proto_library>]; use Bazel's native rule, which
++handles that. The system libprotobuf provides the runtime.
++"""
+ 
+-cc_proto_library = _cc_proto_library
++def cc_proto_library(**kwattrs):
++    native.cc_proto_library(**kwattrs)  # buildifier: disable=native-cc-proto

@@ -1,29 +1,20 @@
-From e930fab1defd8fab209044028e530d7e533c1ef4 Mon Sep 17 00:00:00 2001
+From fd1d8f95861bd2491975675426895b2a4fa31f90 Mon Sep 17 00:00:00 2001
 From: Hongxu Jia <hongxu.jia@windriver.com>
 Date: Mon, 16 May 2022 23:15:47 -0700
-Subject: [PATCH 36/44] third_party/eigen_archive:workaround ice failure while
+Subject: [PATCH] third_party/eigen_archive:workaround ice failure while
  building from source with gcc 7.3.1
 
-The root cause is gcc ice issue:
-https://gcc.gnu.org/bugzilla/show_bug.cgi?id=89752
-
-But we could not patch on native gcc,so try to workaround,
-Refer: https://github.com/tensorflow/tensorflow/issues/25323
-
-Upstream-Status: Inappropriate [wr-installer specific]
-
-Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
 ---
  ...ailure-while-building-from-source-wi.patch | 68 +++++++++++++++++++
- third_party/eigen3/workspace.bzl              |  1 +
+ .../xla/third_party/eigen3/workspace.bzl      |  1 +
  2 files changed, 69 insertions(+)
- create mode 100644 third_party/eigen3/0001-workaround-ice-failure-while-building-from-source-wi.patch
+ create mode 100644 third_party/xla/third_party/eigen3/0001-workaround-ice-failure-while-building-from-source-wi.patch
 
-diff --git a/third_party/eigen3/0001-workaround-ice-failure-while-building-from-source-wi.patch b/third_party/eigen3/0001-workaround-ice-failure-while-building-from-source-wi.patch
+diff --git a/third_party/xla/third_party/eigen3/0001-workaround-ice-failure-while-building-from-source-wi.patch b/third_party/xla/third_party/eigen3/0001-workaround-ice-failure-while-building-from-source-wi.patch
 new file mode 100644
-index 00000000000..82ef62a0d9a
+index 00000000..1fb6ffc0
 --- /dev/null
-+++ b/third_party/eigen3/0001-workaround-ice-failure-while-building-from-source-wi.patch
++++ b/third_party/xla/third_party/eigen3/0001-workaround-ice-failure-while-building-from-source-wi.patch
 @@ -0,0 +1,68 @@
 +From 649d0b938aab1b7081c3895aa1f527d034edb735 Mon Sep 17 00:00:00 2001
 +From: Hongxu Jia <hongxu.jia@windriver.com>
@@ -90,13 +81,13 @@ index 00000000000..82ef62a0d9a
 +       }
 +     }
 +     PacketReturnType rslt = internal::pload<PacketReturnType>(values);
-+-- 
++--
 +2.27.0
 +
-diff --git a/third_party/eigen3/workspace.bzl b/third_party/eigen3/workspace.bzl
-index f06eca368c1..40bdebd6796 100644
---- a/third_party/eigen3/workspace.bzl
-+++ b/third_party/eigen3/workspace.bzl
+diff --git a/third_party/xla/third_party/eigen3/workspace.bzl b/third_party/xla/third_party/eigen3/workspace.bzl
+index 2ab7c777..18ec676d 100644
+--- a/third_party/xla/third_party/eigen3/workspace.bzl
++++ b/third_party/xla/third_party/eigen3/workspace.bzl
 @@ -14,6 +14,7 @@ def repo():
      tf_http_archive(
          name = "eigen_archive",
@@ -105,3 +96,6 @@ index f06eca368c1..40bdebd6796 100644
          sha256 = EIGEN_SHA256,
          strip_prefix = "eigen-{commit}".format(commit = EIGEN_COMMIT),
          urls = tf_mirror_urls("https://gitlab.com/libeigen/eigen/-/archive/{commit}/eigen-{commit}.tar.gz".format(commit = EIGEN_COMMIT)),
+-- 
+2.43.0
+

@@ -18,6 +18,8 @@ github_actions:
   triggers:
   - push
   - pull_request
+  store_build_artifacts: true
+  artifact_retention_days: 14
 provider:
   linux_64: github_actions
   linux_aarch64: github_actions

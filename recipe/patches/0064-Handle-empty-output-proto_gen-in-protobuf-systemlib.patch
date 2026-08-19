@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Fri, 16 May 2026 00:00:00 -0400
+Subject: [PATCH] Handle empty-output proto_gen in systemlib protobuf.bzl
+
+An aggregator tf_proto_library (no srcs of its own, only protodeps)
+produces a proto_gen with no output files. ctx.actions.run rejects an
+empty outputs list. Only run protoc when there are outputs to generate.
+---
+diff --git a/third_party/systemlibs/protobuf.bzl b/third_party/systemlibs/protobuf.bzl
+index 5e2a98b5..dd4f8e18 100644
+--- a/third_party/systemlibs/protobuf.bzl
++++ b/third_party/systemlibs/protobuf.bzl
+@@ -114,7 +114,7 @@ def _proto_gen_impl(ctx):
+         args += ["--%s_out=%s" % (lang, outdir)]
+         tools.append(plugin)
+ 
+-    if args:
++    if args and ctx.outputs.outs:
+         ctx.actions.run(
+             inputs = inputs,
+             outputs = ctx.outputs.outs,

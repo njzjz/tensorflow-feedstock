@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Wed, 21 May 2026 17:00:00 -0400
+Subject: [PATCH] XLA cuda_executor: depend on //xla/tsl/cuda:nvml lazy stub
+
+cuda_executor.cc calls NVML directly but the cuda_executor cc_library,
+unlike its cuda_platform sibling, does not depend on //xla/tsl/cuda:nvml,
+so a binary linking cuda_executor alone misses TSL's lazy-dlopen NVML stub.
+Mirror that dep so a hermetic-CUDA wheel (no DT_NEEDED libnvidia-ml.so.1)
+needs no -lnvidia-ml hack; resolves to :nvml_stub under cuda_wheel and is a
+no-op otherwise.
+---
+--- a/third_party/xla/xla/stream_executor/cuda/BUILD
++++ b/third_party/xla/xla/stream_executor/cuda/BUILD
+@@ -1338,6 +1338,7 @@ cc_library(
+         "//xla/stream_executor/gpu:tma_metadata",
+         "//xla/tsl/cuda",  # buildcleaner: keep
+         "//xla/tsl/cuda:cudart",  # buildcleaner: keep
++        "//xla/tsl/cuda:nvml",  # buildcleaner: keep -- lazy-dlopen NVML stub
+         "//xla/tsl/platform:env",
+         "//xla/tsl/platform:errors",
+         "//xla/tsl/platform:logging",

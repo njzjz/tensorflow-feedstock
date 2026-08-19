@@ -1,0 +1,224 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Fri, 16 May 2026 00:00:00 -0400
+Subject: [PATCH] Restore system protobuf/grpc wiring for TF 2.21.0
+
+Restore the system_build_file/system_link_files wiring for protobuf and
+grpc that TF 2.21.0 dropped, adding shim rule files under
+third_party/systemlibs (including protobuf_python.bzl as python/BUILD for
+pybind11_protobuf) and teaching the grpc stub the plugin_flags argument.
+---
+diff --git a/tensorflow/workspace2.bzl b/tensorflow/workspace2.bzl
+index 94151996..244599bd 100644
+--- a/tensorflow/workspace2.bzl
++++ b/tensorflow/workspace2.bzl
+@@ -410,6 +410,18 @@ def _tf_repositories():
+         patch_file = ["@xla//third_party/protobuf:protobuf.patch"],
+         sha256 = "6e09bbc950ba60c3a7b30280210cd285af8d7d8ed5e0a6ed101c72aff22e8d88",
+         strip_prefix = "protobuf-6.31.1",
++        system_build_file = "//third_party/systemlibs:protobuf.BUILD",
++        system_link_files = {
++            "//third_party/systemlibs:BUILD.bazel": "bazel/BUILD",
++            "//third_party/systemlibs:protobuf.bzl": "protobuf.bzl",
++            "//third_party/systemlibs:protobuf_deps.bzl": "protobuf_deps.bzl",
++            "//third_party/systemlibs:protobuf_python.bzl": "python/BUILD",
++            "//third_party/systemlibs:protobuf.bazel.proto_library.bzl": "bazel/proto_library.bzl",
++            "//third_party/systemlibs:protobuf.bazel.cc_proto_library.bzl": "bazel/cc_proto_library.bzl",
++            "//third_party/systemlibs:protobuf.bazel.py_proto_library.bzl": "bazel/py_proto_library.bzl",
++            "//third_party/systemlibs:protobuf.bazel.java_proto_library.bzl": "bazel/java_proto_library.bzl",
++            "//third_party/systemlibs:protobuf.bazel.java_lite_proto_library.bzl": "bazel/java_lite_proto_library.bzl",
++        },
+         urls = tf_mirror_urls("https://github.com/protocolbuffers/protobuf/archive/refs/tags/v6.31.1.zip"),
+         repo_mapping = {
+             "@abseil-cpp": "@com_google_absl",
+@@ -471,6 +483,16 @@ def _tf_repositories():
+         sha256 = "dd6a2fa311ba8441bbefd2764c55b99136ff10f7ea42954be96006a2723d33fc",
+         strip_prefix = "grpc-1.74.0",
+         system_build_file = "//third_party/systemlibs:grpc.BUILD",
++        system_link_files = {
++            "//third_party/systemlibs:BUILD.bazel": "bazel/BUILD",
++            "//third_party/systemlibs:grpc.BUILD": "src/compiler/BUILD",
++            "//third_party/systemlibs:grpc.bazel.grpc_deps.bzl": "bazel/grpc_deps.bzl",
++            "//third_party/systemlibs:grpc.bazel.grpc_extra_deps.bzl": "bazel/grpc_extra_deps.bzl",
++            "//third_party/systemlibs:grpc.bazel.cc_grpc_library.bzl": "bazel/cc_grpc_library.bzl",
++            "//third_party/systemlibs:grpc.bazel.generate_cc.bzl": "bazel/generate_cc.bzl",
++            "//third_party/systemlibs:grpc.bazel.protobuf.bzl": "bazel/protobuf.bzl",
++            "//third_party/systemlibs:grpc.bazel.python_rules.bzl": "bazel/python_rules.bzl",
++        },
+         patch_file = [
+             "@xla//third_party/grpc:grpc.patch",
+         ],
+diff --git a/third_party/py/python_init_rules.bzl b/third_party/py/python_init_rules.bzl
+index 84370d1d..ee3eef20 100644
+--- a/third_party/py/python_init_rules.bzl
++++ b/third_party/py/python_init_rules.bzl
+@@ -25,6 +25,18 @@ def python_init_rules(extra_patches = []):
+         patch_file = ["@xla//third_party/protobuf:protobuf.patch"],
+         sha256 = "6e09bbc950ba60c3a7b30280210cd285af8d7d8ed5e0a6ed101c72aff22e8d88",
+         strip_prefix = "protobuf-6.31.1",
++        system_build_file = "@//third_party/systemlibs:protobuf.BUILD",
++        system_link_files = {
++            "@//third_party/systemlibs:BUILD.bazel": "bazel/BUILD",
++            "@//third_party/systemlibs:protobuf.bzl": "protobuf.bzl",
++            "@//third_party/systemlibs:protobuf_deps.bzl": "protobuf_deps.bzl",
++            "@//third_party/systemlibs:protobuf_python.bzl": "python/BUILD",
++            "@//third_party/systemlibs:protobuf.bazel.proto_library.bzl": "bazel/proto_library.bzl",
++            "@//third_party/systemlibs:protobuf.bazel.cc_proto_library.bzl": "bazel/cc_proto_library.bzl",
++            "@//third_party/systemlibs:protobuf.bazel.py_proto_library.bzl": "bazel/py_proto_library.bzl",
++            "@//third_party/systemlibs:protobuf.bazel.java_proto_library.bzl": "bazel/java_proto_library.bzl",
++            "@//third_party/systemlibs:protobuf.bazel.java_lite_proto_library.bzl": "bazel/java_lite_proto_library.bzl",
++        },
+         urls = tf_mirror_urls("https://github.com/protocolbuffers/protobuf/archive/refs/tags/v6.31.1.zip"),
+         repo_mapping = {
+             "@abseil-cpp": "@com_google_absl",
+diff --git a/third_party/systemlibs/grpc.bazel.cc_grpc_library.bzl b/third_party/systemlibs/grpc.bazel.cc_grpc_library.bzl
+index 83c2382a..8944d02f 100644
+--- a/third_party/systemlibs/grpc.bazel.cc_grpc_library.bzl
++++ b/third_party/systemlibs/grpc.bazel.cc_grpc_library.bzl
+@@ -13,6 +13,7 @@ def cc_grpc_library(
+         generate_mocks = False,
+         use_external = False,
+         grpc_only = False,
++        plugin_flags = [],
+         **kwargs):
+     """Generates C++ grpc classes for services defined in a proto file.
+ 
+@@ -92,6 +93,7 @@ def cc_grpc_library(
+             plugin = "@com_github_grpc_grpc//src/compiler:grpc_cpp_plugin",
+             well_known_protos = well_known_protos,
+             generate_mocks = generate_mocks,
++            flags = plugin_flags,
+             **kwargs
+         )
+         cc_library(
+diff --git a/third_party/systemlibs/grpc.bazel.python_rules.bzl b/third_party/systemlibs/grpc.bazel.python_rules.bzl
+new file mode 100644
+index 00000000..9ff9e421
+--- /dev/null
++++ b/third_party/systemlibs/grpc.bazel.python_rules.bzl
+@@ -0,0 +1,18 @@
++"""Shim providing py_grpc_library for a systemized gRPC.
++
++The system gRPC package does not ship the gRPC Python codegen plugin, so
++py_grpc_library produces an empty py_library (no *_pb2_grpc.py stubs). This is
++sufficient for the C/C++ and Python TensorFlow targets built by the
++conda-forge feedstock.
++"""
++
++load("@rules_python//python:py_library.bzl", "py_library")
++
++def py_grpc_library(name, srcs = [], deps = [], **kwargs):
++    _ = (srcs, deps)  # @unused
++    py_library(
++        name = name,
++        srcs = [],
++        deps = [],
++        **{k: v for k, v in kwargs.items() if k in ("testonly", "compatible_with", "visibility")}
++    )
+diff --git a/third_party/systemlibs/protobuf.bazel.cc_proto_library.bzl b/third_party/systemlibs/protobuf.bazel.cc_proto_library.bzl
+new file mode 100644
+index 00000000..c428ba90
+--- /dev/null
++++ b/third_party/systemlibs/protobuf.bazel.cc_proto_library.bzl
+@@ -0,0 +1,5 @@
++"""Shim so @com_google_protobuf//bazel:cc_proto_library.bzl resolves for system protobuf."""
++
++load("@com_google_protobuf//:protobuf.bzl", _cc_proto_library = "cc_proto_library")
++
++cc_proto_library = _cc_proto_library
+diff --git a/third_party/systemlibs/protobuf.bazel.java_lite_proto_library.bzl b/third_party/systemlibs/protobuf.bazel.java_lite_proto_library.bzl
+new file mode 100644
+index 00000000..921b83a5
+--- /dev/null
++++ b/third_party/systemlibs/protobuf.bazel.java_lite_proto_library.bzl
+@@ -0,0 +1,13 @@
++"""Shim so @com_google_protobuf//bazel:java_lite_proto_library.bzl resolves for system protobuf.
++
++The conda-forge feedstock does not build the TensorFlow Java API; this stub
++just lets BUILD files that load java_lite_proto_library resolve. If invoked it
++produces an empty filegroup.
++"""
++
++def java_lite_proto_library(name, **kwargs):
++    native.filegroup(
++        name = name,
++        srcs = [],
++        **{k: v for k, v in kwargs.items() if k in ("visibility", "compatible_with", "testonly")}
++    )
+diff --git a/third_party/systemlibs/protobuf.bazel.java_proto_library.bzl b/third_party/systemlibs/protobuf.bazel.java_proto_library.bzl
+new file mode 100644
+index 00000000..efc3ade7
+--- /dev/null
++++ b/third_party/systemlibs/protobuf.bazel.java_proto_library.bzl
+@@ -0,0 +1,13 @@
++"""Shim so @com_google_protobuf//bazel:java_proto_library.bzl resolves for system protobuf.
++
++The conda-forge feedstock does not build the TensorFlow Java API; this stub
++just lets BUILD files that load java_proto_library resolve. If invoked it
++produces an empty filegroup.
++"""
++
++def java_proto_library(name, **kwargs):
++    native.filegroup(
++        name = name,
++        srcs = [],
++        **{k: v for k, v in kwargs.items() if k in ("visibility", "compatible_with", "testonly")}
++    )
+diff --git a/third_party/systemlibs/protobuf.bazel.proto_library.bzl b/third_party/systemlibs/protobuf.bazel.proto_library.bzl
+new file mode 100644
+index 00000000..2979e46a
+--- /dev/null
++++ b/third_party/systemlibs/protobuf.bazel.proto_library.bzl
+@@ -0,0 +1,5 @@
++"""Shim so @com_google_protobuf//bazel:proto_library.bzl resolves for system protobuf."""
++
++load("@rules_proto//proto:defs.bzl", _proto_library = "proto_library")
++
++proto_library = _proto_library
+diff --git a/third_party/systemlibs/protobuf.bazel.py_proto_library.bzl b/third_party/systemlibs/protobuf.bazel.py_proto_library.bzl
+new file mode 100644
+index 00000000..516f9049
+--- /dev/null
++++ b/third_party/systemlibs/protobuf.bazel.py_proto_library.bzl
+@@ -0,0 +1,5 @@
++"""Shim so @com_google_protobuf//bazel:py_proto_library.bzl resolves for system protobuf."""
++
++load("@com_google_protobuf//:protobuf.bzl", _py_proto_library = "py_proto_library")
++
++py_proto_library = _py_proto_library
+diff --git a/third_party/systemlibs/protobuf_python.bzl b/third_party/systemlibs/protobuf_python.bzl
+new file mode 100644
+index 00000000..6fafd95f
+--- /dev/null
++++ b/third_party/systemlibs/protobuf_python.bzl
+@@ -0,0 +1,7 @@
++# Linked into the systemized protobuf repo as python/BUILD so that
++# @com_google_protobuf//python:proto_api resolves. The proto_api interface
++# is header-only against the system libprotobuf.
++cc_library(
++    name = "proto_api",
++    visibility = ["//visibility:public"],
++)
+diff --git a/third_party/xla/third_party/py/python_init_rules.bzl b/third_party/xla/third_party/py/python_init_rules.bzl
+index 84370d1d..ee3eef20 100644
+--- a/third_party/xla/third_party/py/python_init_rules.bzl
++++ b/third_party/xla/third_party/py/python_init_rules.bzl
+@@ -25,6 +25,18 @@ def python_init_rules(extra_patches = []):
+         patch_file = ["@xla//third_party/protobuf:protobuf.patch"],
+         sha256 = "6e09bbc950ba60c3a7b30280210cd285af8d7d8ed5e0a6ed101c72aff22e8d88",
+         strip_prefix = "protobuf-6.31.1",
++        system_build_file = "@//third_party/systemlibs:protobuf.BUILD",
++        system_link_files = {
++            "@//third_party/systemlibs:BUILD.bazel": "bazel/BUILD",
++            "@//third_party/systemlibs:protobuf.bzl": "protobuf.bzl",
++            "@//third_party/systemlibs:protobuf_deps.bzl": "protobuf_deps.bzl",
++            "@//third_party/systemlibs:protobuf_python.bzl": "python/BUILD",
++            "@//third_party/systemlibs:protobuf.bazel.proto_library.bzl": "bazel/proto_library.bzl",
++            "@//third_party/systemlibs:protobuf.bazel.cc_proto_library.bzl": "bazel/cc_proto_library.bzl",
++            "@//third_party/systemlibs:protobuf.bazel.py_proto_library.bzl": "bazel/py_proto_library.bzl",
++            "@//third_party/systemlibs:protobuf.bazel.java_proto_library.bzl": "bazel/java_proto_library.bzl",
++            "@//third_party/systemlibs:protobuf.bazel.java_lite_proto_library.bzl": "bazel/java_lite_proto_library.bzl",
++        },
+         urls = tf_mirror_urls("https://github.com/protocolbuffers/protobuf/archive/refs/tags/v6.31.1.zip"),
+         repo_mapping = {
+             "@abseil-cpp": "@com_google_absl",

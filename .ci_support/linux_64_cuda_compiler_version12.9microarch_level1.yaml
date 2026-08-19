@@ -1,7 +1,7 @@
 c_compiler:
-- gcc
+- clang
 c_compiler_version:
-- '11'
+- '22'
 c_stdlib:
 - sysroot
 c_stdlib_version:
@@ -10,14 +10,18 @@ channel_sources:
 - conda-forge
 channel_targets:
 - conda-forge main
+cuda_compiler:
+- cuda-nvcc
 cuda_compiler_version:
-- None
+- '12.9'
+cudnn:
+- '9'
 cxx_compiler:
-- gxx
+- clangxx
 cxx_compiler_version:
-- '11'
+- '22'
 docker_image:
-- quay.io/condaforge/linux-anvil-x86_64:alma9
+- quay.io/condaforge/linux-anvil-x86_64:alma10
 flatbuffers:
 - 25.9.23
 giflib:
@@ -40,6 +44,8 @@ libprotobuf:
 - 6.33.5
 microarch_level:
 - '1'
+nccl:
+- '2'
 openssl:
 - '3.5'
 perl:
@@ -58,7 +64,7 @@ snappy:
 sqlite:
 - '3'
 target_platform:
-- linux-aarch64
+- linux-64
 zip_keys:
 - - c_compiler_version
   - cxx_compiler_version

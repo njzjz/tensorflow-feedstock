@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mark Harfouche <mark.harfouche@gmail.com>
+Date: Fri, 16 May 2026 00:00:00 -0400
+Subject: [PATCH] tf_proto_library: srcs-based py_proto_library convention
+
+Make tf_proto_library call the feedstock's old srcs-based systemlib
+py_proto_library instead of the modern deps=[proto_library] convention TF
+2.21.0 uses, chaining deps as the proto deps' _py_proto targets (skipping
+well-known protos). cc_proto_library stays on the modern native shim.
+---
+diff --git a/third_party/xla/xla/tsl/platform/default/build_config.bzl b/third_party/xla/xla/tsl/platform/default/build_config.bzl
+index fdb624ea..1e862d0f 100644
+--- a/third_party/xla/xla/tsl/platform/default/build_config.bzl
++++ b/third_party/xla/xla/tsl/platform/default/build_config.bzl
+@@ -247,6 +247,28 @@ def tf_proto_library(
+         **kwargs
+     )
+ 
++    # The cc_proto_library / py_proto_library rules loaded here are the
++    # systemlib (conda-forge protobuf) old-convention macros, re-exported via
++    # thin shims from @com_google_protobuf//:protobuf.bzl. Those macros expect
++    # `srcs` (the .proto files) and `deps` (other cc_proto_library /
++    # py_proto_library targets), NOT a proto_library target. Replicate the
++    # 2.19.1 behaviour: normalize each proto dep label and append the matching
++    # old-convention suffix (_cc for C++, _py_proto for Python).
++    def _suffixed_deps(proto_deps, suffix):
++        suffixed = []
++        for dep in proto_deps:
++            # Well-known protobuf protos are handled internally by the
++            # systemlib cc_proto_library / py_proto_library macros; they have
++            # no _cc / _py_proto / _genproto targets of their own.
++            if dep.startswith("@com_google_protobuf//"):
++                continue
++            full = dep
++            if ":" not in dep:
++                dep_pieces = dep.split("/")
++                full += ":" + dep_pieces[len(dep_pieces) - 1]
++            suffixed.append(full + suffix)
++        return suffixed
++
+     cc_proto_name = name + "_cc"
+     cc_proto_library(
+         name = cc_proto_name,
+@@ -283,7 +305,10 @@ def tf_proto_library(
+         testonly = testonly,
+         compatible_with = compatible_with,
+         visibility = visibility,
+-        deps = [":{}".format(name)],
++        srcs = srcs,
++        protoc = "@com_google_protobuf//:protoc",
++        default_runtime = "@com_google_protobuf//:protobuf_python",
++        deps = _suffixed_deps(deps + protodeps, "_py_proto"),
+     )
+ 
+     if has_services:
+@@ -299,8 +324,10 @@ def tf_proto_library(
+         )
+ 
+     py_library(
++        # The srcs-based systemlib py_proto_library already yields py_library
++        # targets, so depend on them rather than listing them as srcs (an
++        # aggregator proto's _py_proto produces no .py files).
+         name = name + "_py",
+-        srcs = py_deps,
+         deps = py_deps,
+         testonly = testonly,
+         compatible_with = compatible_with,

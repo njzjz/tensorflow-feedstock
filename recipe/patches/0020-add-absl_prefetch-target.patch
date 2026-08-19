@@ -1,16 +1,16 @@
-From efac5df326a3bbeb1c6d531186495720c95f93d7 Mon Sep 17 00:00:00 2001
+From a3d9fe652cd31a093a64074c11e2e5b0dd9a139b Mon Sep 17 00:00:00 2001
 From: "H. Vetinari" <h.vetinari@gmx.com>
 Date: Sun, 12 May 2024 22:29:25 +1100
-Subject: [PATCH 20/44] add absl_prefetch target
+Subject: [PATCH] add absl_prefetch target
 
 ---
- third_party/absl/system.absl.base.BUILD | 8 ++++++++
+ third_party/xla/third_party/absl/system.absl.base.BUILD | 8 ++++++++
  1 file changed, 8 insertions(+)
 
-diff --git a/third_party/absl/system.absl.base.BUILD b/third_party/absl/system.absl.base.BUILD
-index a423d5f70da..b31592d31a3 100644
---- a/third_party/absl/system.absl.base.BUILD
-+++ b/third_party/absl/system.absl.base.BUILD
+diff --git a/third_party/xla/third_party/absl/system.absl.base.BUILD b/third_party/xla/third_party/absl/system.absl.base.BUILD
+index a423d5f7..b31592d3 100644
+--- a/third_party/xla/third_party/absl/system.absl.base.BUILD
++++ b/third_party/xla/third_party/absl/system.absl.base.BUILD
 @@ -116,6 +116,14 @@ cc_library(
      ],
  )
@@ -26,3 +26,6 @@ index a423d5f70da..b31592d31a3 100644
  cc_library(
      name = "strerror",
      linkopts = ["-labsl_strerror"],
+-- 
+2.43.0
+

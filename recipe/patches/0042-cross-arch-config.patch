@@ -1,19 +1,19 @@
-From 977dfe9a0ff84b6d42307a5784ced2aa70bc93b6 Mon Sep 17 00:00:00 2001
+From f0c61217c7b7ff5d218e6bb9a53f83900ec9a19d Mon Sep 17 00:00:00 2001
 From: dslarm <david+dslarm@lecomber.net>
 Date: Tue, 14 Oct 2025 15:02:09 +0000
-Subject: [PATCH 42/44] cross arch config
+Subject: [PATCH] cross arch config
 
 ---
- third_party/llvm/dirty.patch   | 11 +++++++++++
- third_party/llvm/workspace.bzl |  1 +
+ third_party/xla/third_party/llvm/dirty.patch   | 11 +++++++++++
+ third_party/xla/third_party/llvm/workspace.bzl |  1 +
  2 files changed, 12 insertions(+)
- create mode 100644 third_party/llvm/dirty.patch
+ create mode 100644 third_party/xla/third_party/llvm/dirty.patch
 
-diff --git a/third_party/llvm/dirty.patch b/third_party/llvm/dirty.patch
+diff --git a/third_party/xla/third_party/llvm/dirty.patch b/third_party/xla/third_party/llvm/dirty.patch
 new file mode 100644
-index 00000000000..db99a4e597d
+index 00000000..db99a4e5
 --- /dev/null
-+++ b/third_party/llvm/dirty.patch
++++ b/third_party/xla/third_party/llvm/dirty.patch
 @@ -0,0 +1,11 @@
 +--- a/utils/bazel/llvm-project-overlay/llvm/config.bzl	2025-04-17 16:11:50.417140143 +0000
 ++++ b/utils/bazel/llvm-project-overlay/llvm/config.bzl	2025-04-17 16:11:54.891132310 +0000
@@ -26,15 +26,18 @@ index 00000000000..db99a4e597d
 + }) + [
 +     "LLVM_VERSION_MAJOR={}".format(LLVM_VERSION_MAJOR),
 +     "LLVM_VERSION_MINOR={}".format(LLVM_VERSION_MINOR),
-diff --git a/third_party/llvm/workspace.bzl b/third_party/llvm/workspace.bzl
-index dc3ceaddaea..924293650ca 100644
---- a/third_party/llvm/workspace.bzl
-+++ b/third_party/llvm/workspace.bzl
-@@ -22,6 +22,7 @@ def repo(name):
-             "//third_party/llvm:mathextras.patch",
+diff --git a/third_party/xla/third_party/llvm/workspace.bzl b/third_party/xla/third_party/llvm/workspace.bzl
+index 9b5614a7..5c02e03a 100644
+--- a/third_party/xla/third_party/llvm/workspace.bzl
++++ b/third_party/xla/third_party/llvm/workspace.bzl
+@@ -23,6 +23,7 @@ def repo(name):
              "//third_party/llvm:toolchains.patch",
              "//third_party/llvm:zstd.patch",
+             "//third_party/llvm:lit_test.patch",
 +            "//third_party/llvm:dirty.patch",
          ],
          link_files = {"//third_party/llvm:run_lit.sh": "mlir/run_lit.sh"},
      )
+-- 
+2.43.0
+

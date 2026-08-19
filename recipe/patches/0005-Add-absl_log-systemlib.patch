@@ -1,19 +1,18 @@
-From d49beaef49c52ea690f02de7cfbde0e6aef06490 Mon Sep 17 00:00:00 2001
+From dcf56a7a3255e835a8b31014cd765424aaf5574d Mon Sep 17 00:00:00 2001
 From: "Uwe L. Korn" <uwe.korn@quantco.com>
 Date: Wed, 30 Aug 2023 16:59:28 +0200
-Subject: [PATCH 05/44] Add absl_log systemlib
+Subject: [PATCH] Add absl_log systemlib
 
 ---
- third_party/absl/system.absl.log.BUILD | 22 ++++++++++++++++++++++
- third_party/absl/workspace.bzl         |  1 +
- 2 files changed, 23 insertions(+)
- create mode 100644 third_party/absl/system.absl.log.BUILD
+ .../third_party/absl/system.absl.log.BUILD    | 22 +++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+ create mode 100644 third_party/xla/third_party/absl/system.absl.log.BUILD
 
-diff --git a/third_party/absl/system.absl.log.BUILD b/third_party/absl/system.absl.log.BUILD
+diff --git a/third_party/xla/third_party/absl/system.absl.log.BUILD b/third_party/xla/third_party/absl/system.absl.log.BUILD
 new file mode 100644
-index 00000000000..0248bda0f52
+index 00000000..0248bda0
 --- /dev/null
-+++ b/third_party/absl/system.absl.log.BUILD
++++ b/third_party/xla/third_party/absl/system.absl.log.BUILD
 @@ -0,0 +1,22 @@
 +load("@rules_cc//cc:defs.bzl", "cc_library")
 +
@@ -37,15 +36,6 @@ index 00000000000..0248bda0f52
 +        "-labsl_log_internal_nullguard",
 +    ],
 +)
-diff --git a/third_party/absl/workspace.bzl b/third_party/absl/workspace.bzl
-index d5973b13b39..b5197f9304b 100644
---- a/third_party/absl/workspace.bzl
-+++ b/third_party/absl/workspace.bzl
-@@ -20,6 +20,7 @@ def repo():
-         "flags",
-         "functional",
-         "hash",
-+        "log",
-         "memory",
-         "meta",
-         "numeric",
+-- 
+2.43.0
+
